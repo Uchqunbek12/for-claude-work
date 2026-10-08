@@ -17,6 +17,8 @@ from __future__ import annotations
 import re
 
 from . import expr as E
+from . import parser as P
+from .unflatten import unflatten
 from .detectors import AnalysisResult, _LOGIC_OPS, _balanced, _statements, _split_stmt, simplify_mba, to_c
 from .models import FunctionInfo
 from .parser import _mask_comments_and_strings
@@ -169,9 +171,15 @@ def prune_constant_branches(code: str) -> str:
 def remove_dead_variables(code: str, dead: list[str]) -> str:
     """Keraksiz o'zgaruvchilarning e'loni va ularga qiymat beruvchi gaplarni olib tashlaydi."""
     for var in dead:
-        assign = rf"\b{re.escape(var)}\s*(?:=|\+=|-=|\*=|\^=|\|=|&=|<<=|>>=)(?!=)[^;]*;"
-        code = re.sub(assign, ";", code)
-        code = re.sub(rf"^[ \t]*[A-Za-z_][\w \t\*]*\b{re.escape(var)}\s*;[ \t]*(//[^\n]*)?\n", "", code, flags=re.M)
+        v = re.escape(var)
+        # 1) yagona e'lon: "unsigned int junk;" yoki "unsigned int junk = 0u;" — butun qatorni o'chiramiz
+        code = re.sub(rf"^[ \t]*(?:[A-Za-z_]\w*[ \t]+)+\**[ \t]*{v}[ \t]*(?:=[^;,]*)?;[ \t]*(//[^\n]*)?\n",
+                      "", code, flags=re.M)
+        # 2) ko'p o'zgaruvchili e'lon: "int h = 0, junk = 0;" -> "int h = 0;"
+        code = re.sub(rf",\s*\**{v}\s*(?:=\s*[^,;]+)?(?=\s*[,;])", "", code)
+        code = re.sub(rf"(?<=[\s\*]){v}\s*(?:=\s*[^,;]+)?\s*,\s*(?=[A-Za-z_*])", "", code)
+        # 3) oddiy qiymat berishlar: "junk = k * 7;" / "junk ^= h;" -> ";" (keyin tozalanadi)
+        code = re.sub(rf"\b{v}\s*(?:=|\+=|-=|\*=|\^=|\|=|&=|<<=|>>=)(?!=)[^;]*;", ";", code)
     # "if (shart) ;" — bo'sh gapli shartni olib tashlaymiz (shartda funksiya chaqiruvi bo'lmasa)
     for _ in range(50):
         m = _mask_comments_and_strings(code)
@@ -187,7 +195,7 @@ def remove_dead_variables(code: str, dead: list[str]) -> str:
         if not found:
             break
     # yolg'iz qolgan ";" qatorlarini tozalaymiz
-    return re.sub(r"^[ \t]*;[ \t]*\n", "", code, flags=re.M)
+    return re.sub(r"^[ \t]*;[ \t]*(?:/\*.*?\*/|//[^\n]*)?[ \t]*\n", "", code, flags=re.M)
 
 
 def _static_preamble(preamble: str) -> str:
@@ -202,12 +210,42 @@ def _static_preamble(preamble: str) -> str:
     return "\n".join(out)
 
 
+def _unused_locals(code: str) -> list[str]:
+    """E'lon qilingan, lekin boshqa hech qayerda uchramaydigan lokal o'zgaruvchilar."""
+    masked = _mask_comments_and_strings(code)
+    names = []
+    for m in re.finditer(r"^[ \t]*(?:[A-Za-z_]\w*[ \t]+)+\**[ \t]*([A-Za-z_]\w*)[ \t]*;", masked, flags=re.M):
+        name = m.group(1)
+        if name not in ("return", "break", "continue") and len(re.findall(rf"\b{name}\b", masked)) == 1:
+            names.append(name)
+    return names
+
+
 def run_offline(func: FunctionInfo, analysis: AnalysisResult, preamble: str = "",
-                aggressive: bool = True) -> DeobfResult:
-    code, changes = simplify_code(func)
-    if aggressive:
+                level: int = 2) -> DeobfResult:
+    """level: 2 — flattening'ni yechish + tarmoqlarni kesish + o'lik kod; 1 — flattening'siz; 0 — faqat ifodalar."""
+    unflattened = None
+    work = func
+    if level >= 2 and analysis.state_machines:
+        unflattened = unflatten(func.text)
+        if unflattened:
+            reparsed = P.parse(unflattened).get(func.name)
+            if reparsed is not None:
+                work = reparsed
+            else:
+                unflattened = None
+    code, changes = simplify_code(work)
+    if level >= 1:
         code = prune_constant_branches(code)
-        code = remove_dead_variables(code, [f.snippet for f in analysis.findings if f.technique == "dead_code"])
+        dead = [f.snippet for f in analysis.findings if f.technique == "dead_code"]
+        code = remove_dead_variables(code, dead)
+        reparsed = P.parse(code).get(func.name)
+        if reparsed is not None:     # yangi paydo bo'lgan keraksiz o'zgaruvchilar (masalan, eski state)
+            from .detectors import detect_dead_variables
+            extra = [f.snippet for f in detect_dead_variables(reparsed)] + _unused_locals(code)
+            if extra:
+                code = remove_dead_variables(code, extra)
+        code = re.sub(r"\n[ \t]*\n([ \t]*\n)+", "\n\n", code)          # ortiqcha bo'sh qatorlar
     pre = _static_preamble(preamble)
     if pre:
         code = pre + "\n\n" + code
@@ -240,6 +278,17 @@ def run_offline(func: FunctionInfo, analysis: AnalysisResult, preamble: str = ""
         if not any(b.original_lines == str(ln) for b in blocks):
             blocks.append(Block(title="Soddalashtirish", original_lines=str(ln), original_code=old,
                                 simplified_code=new, explanation="Isbotlangan soddalashtirish qo'llandi."))
+    if unflattened:
+        sm = analysis.state_machines[0]
+        blocks.append(Block(
+            title="Boshqaruv oqimi tiklandi (unflattening)",
+            original_lines=str(next((f.line for f in analysis.findings if f.technique == "control_flow_flattening"), 1)),
+            original_code=f"while (1) {{ switch ({sm.state_var}) {{ ... {len(sm.transitions)} ta holat ... }} }}",
+            simplified_code="\n".join(ln for ln in code.splitlines() if re.search(r"\b(while|if|for)\b", ln))[:400],
+            explanation=(f"Holatlar mashinasi ({sm.state_var} o'zgaruvchisi, {len(sm.transitions)} ta holat) graf sifatida "
+                         "tahlil qilindi: holatga qaytuvchi tarmoq — tsikl (while), qolganlari — if/else. "
+                         "Natijada dispetcher (while(1)+switch) va holat o'zgaruvchisi olib tashlandi."),
+        ))
     blocks.sort(key=lambda b: int(re.match(r"\d+", b.original_lines).group()))
 
     techniques = [t for t in analysis.techniques() if t != "known_constants"]
@@ -248,6 +297,7 @@ def run_offline(func: FunctionInfo, analysis: AnalysisResult, preamble: str = ""
                + (f": {', '.join(TECH_NAMES_UZ.get(t, t) for t in techniques)}." if techniques else
                   "; obfuskatsiya belgilari topilmadi.")
                + (f" {len(changes)} ta ifoda isbotlangan holda soddalashtirildi." if changes else "")
+               + (" Flattening yechildi: boshqaruv oqimi tuzilmali ko'rinishga (while/if) qaytarildi." if unflattened else "")
                + ("".join(f" {k}." for k in known) if known else "")
                + " To'liq tushuntirish va boshqaruv oqimini tiklash uchun LLM rejimidan foydalaning.")
     return DeobfResult(

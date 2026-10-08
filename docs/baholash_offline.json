@@ -1,0 +1,172 @@
+[
+  {
+    "id": "s1_mba",
+    "engine": "offline",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 10,
+      "cyclomatic": 1,
+      "operators": 12,
+      "constants": 0
+    },
+    "after": {
+      "lines": 10,
+      "cyclomatic": 1,
+      "operators": 5,
+      "constants": 0
+    },
+    "clean": {
+      "lines": 4,
+      "cyclomatic": 1,
+      "operators": 5,
+      "constants": 0
+    },
+    "attempts": 1,
+    "cost": 0.0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "time": 0.25,
+    "error": "",
+    "suggested_name": "mix"
+  },
+  {
+    "id": "s2_opaque",
+    "engine": "offline",
+    "verification": "verified",
+    "truth": "mismatch",
+    "truth_details": "846/5000 testda farq:",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 17,
+      "cyclomatic": 7,
+      "operators": 13,
+      "constants": 1
+    },
+    "after": {
+      "lines": 10,
+      "cyclomatic": 5,
+      "operators": 4,
+      "constants": 0
+    },
+    "clean": {
+      "lines": 6,
+      "cyclomatic": 3,
+      "operators": 0,
+      "constants": 0
+    },
+    "attempts": 1,
+    "cost": 0.0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "time": 0.21,
+    "error": "",
+    "suggested_name": "clamp"
+  },
+  {
+    "id": "s3_flatten",
+    "engine": "offline",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 28,
+      "cyclomatic": 7,
+      "operators": 1,
+      "constants": 10
+    },
+    "after": {
+      "lines": 12,
+      "cyclomatic": 2,
+      "operators": 1,
+      "constants": 0
+    },
+    "clean": {
+      "lines": 6,
+      "cyclomatic": 2,
+      "operators": 1,
+      "constants": 0
+    },
+    "attempts": 1,
+    "cost": 0.0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "time": 0.12,
+    "error": "",
+    "suggested_name": "gcd"
+  },
+  {
+    "id": "s4_strings",
+    "engine": "offline",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 9,
+      "cyclomatic": 2,
+      "operators": 18,
+      "constants": 1
+    },
+    "after": {
+      "lines": 10,
+      "cyclomatic": 2,
+      "operators": 18,
+      "constants": 1
+    },
+    "clean": {
+      "lines": 4,
+      "cyclomatic": 1,
+      "operators": 2,
+      "constants": 0
+    },
+    "attempts": 1,
+    "cost": 0.0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "time": 0.14,
+    "error": "",
+    "suggested_name": "greet_char"
+  },
+  {
+    "id": "s5_combined",
+    "engine": "offline",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 42,
+      "cyclomatic": 9,
+      "operators": 16,
+      "constants": 3
+    },
+    "after": {
+      "lines": 18,
+      "cyclomatic": 2,
+      "operators": 8,
+      "constants": 2
+    },
+    "clean": {
+      "lines": 8,
+      "cyclomatic": 2,
+      "operators": 6,
+      "constants": 2
+    },
+    "attempts": 1,
+    "cost": 0.0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "time": 0.19,
+    "error": "",
+    "suggested_name": "checksum"
+  }
+]

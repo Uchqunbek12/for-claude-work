@@ -84,7 +84,7 @@ def cmd_eval(args) -> int:
     from .evaluate import run_evaluation
 
     return run_evaluation(model=args.model, offline=args.offline, effort=args.effort,
-                          output=args.output, quiet=args.quiet)
+                          output=args.output, quiet=args.quiet, source=args.source)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -124,6 +124,8 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("-m", "--model", help=f"model: {models}")
     e.add_argument("--offline", action="store_true")
     e.add_argument("--effort", default="medium", choices=["low", "medium", "high"])
+    e.add_argument("--source", default="angr", help="psevdokod manbasi: samples/decompiled/<id>.<source>.c "
+                   "(angr, ida, ghidra)")
     e.add_argument("-o", "--output", default="docs/baholash_natijalari.md", help="natijalar jadvali fayli")
     e.add_argument("-q", "--quiet", action="store_true")
     e.set_defaults(func=cmd_eval)

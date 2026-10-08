@@ -70,16 +70,15 @@ def _noop(_: str) -> None:
 def _run_offline(parsed: ParsedInput, func: FunctionInfo, analysis: AnalysisResult, cfg: AgentConfig,
                  progress: ProgressFn) -> tuple[DeobfResult, VerifyReport, list[Attempt]]:
     attempts = []
-    result = offline.run_offline(func, analysis, parsed.preamble, aggressive=True)
-    progress("Tekshiruv: kompilyatsiya va differensial test...")
-    rep = verifier.verify(parsed, func, result.c_code, cfg.n_tests)
-    attempts.append(Attempt(1, rep.status, rep.details))
-    if not rep.ok:
-        # Xavfsizroq variant: faqat ifodalarni soddalashtiramiz, tarmoqlarni kesmaymiz
-        progress("Natija mos kelmadi — ehtiyotkor (faqat ifodalar) rejimida qayta urinilmoqda...")
-        result = offline.run_offline(func, analysis, parsed.preamble, aggressive=False)
+    result, rep = None, None
+    # Avval eng kuchli soddalashtirish, testdan o'tmasa — ehtiyotkorroq darajalar
+    for level in (2, 1, 0):
+        result = offline.run_offline(func, analysis, parsed.preamble, level=level)
+        progress(f"Tekshiruv (offline, {level}-daraja): kompilyatsiya va differensial test...")
         rep = verifier.verify(parsed, func, result.c_code, cfg.n_tests)
-        attempts.append(Attempt(2, rep.status, rep.details))
+        attempts.append(Attempt(len(attempts) + 1, rep.status, f"[daraja {level}] " + rep.details))
+        if rep.ok:
+            break
     return result, rep, attempts
 
 
