@@ -378,3 +378,48 @@ to'g'ri qayta ishlanadimi.
 Natija: **22/22 test o'tdi.**
 
 > ⚠️ Haqiqiy Claude javobi bilan sinov API kaliti bor kompyuterda o'tkaziladi (yo'riqnomada yoziladi).
+
+---
+
+## 5-bosqich. Tekshiruv va o'z-o'zini tuzatish sikli (agent)
+
+### 5.1. Nima uchun bu "agent"
+Oddiy chatbot javobni bir marta beradi va unga ishonish-ishonmaslik foydalanuvchining zimmasida qoladi.
+Bizning vosita esa **natijani o'zi tekshiradi** va muammo bo'lsa, aniq xato ma'lumoti bilan
+modeldan tuzatishni so'raydi:
+
+```
+ psevdokod → parser → statik tahlil → Claude → tekshiruv ──✅──→ hisobot
+                                         ↑          │
+                                         └──── ❌ ──┘  (xato matni bilan, maks. 3 marta)
+```
+
+### 5.2. Tekshiruv (`deobf_agent/verifier.py`)
+| Qadam | Nima tekshiriladi | Xato bo'lsa Claude'ga nima yuboriladi |
+|---|---|---|
+| 1. Sintaksis | `gcc -fsyntax-only` | gcc xato xabarlari |
+| 2. Shakl | funksiya nomi va parametrlar soni aslidagidekmi | "nomni/parametrlarni saqla: (...)" |
+| 3. Xatti-harakat | asl psevdokod va yangi kod 2000 tasodifiy kirishda bir xilmi | farq chiqqan kirish qiymatlari va ikkala natija |
+
+Natija holatlari: **verified** ✅ (ekvivalentligi isbotlangan), **compiled** 🟡 (kompilyatsiya bo'ldi,
+lekin avtomatik solishtirib bo'lmadi, masalan funksiya ko'rsatkich qabul qiladi), **mismatch** ❌,
+**compile_error** ❌, **no_compiler** ⚪.
+
+### 5.3. Agent (`deobf_agent/agent.py`)
+- Har bir urinish natijasi saqlanadi va **eng yaxshisi** tanlanadi (verified > compiled > mismatch > compile_error).
+- Urinishlar tugasa ham natija yaxshi bo'lmasa, vosita buni **ochiq aytadi** — "muvaffaqiyat" deb yolg'on ko'rsatmaydi.
+- Claude bilan muammo bo'lsa (kalit yo'q, limit, rad etish), vosita to'xtab qolmaydi:
+  natijani **offline rejimdan** oladi va xatoni hisobotda ko'rsatadi.
+- Offline rejim ham tekshiruvdan o'tadi. Agar "agressiv" variant (tarmoqlarni kesish) testdan o'tmasa,
+  ehtiyotkor variantga (faqat ifodalarni soddalashtirish) qaytiladi.
+
+### 5.4. Testlar (soxta mijoz bilan ssenariylar)
+| Ssenariy | Kutilgan xatti-harakat | Natija |
+|---|---|---|
+| Claude 1-urinishda `a + b` o'rniga `a \| b` yozadi | differensial test farqni topadi → misollar Claude'ga yuboriladi → 2-urinish ✅ | ✅ |
+| Claude sintaksis xatoli kod beradi | gcc xatolari Claude'ga yuboriladi → 2-urinish ✅ | ✅ |
+| Claude ikki marta ham xato qiladi | natija "mismatch" deb ochiq ko'rsatiladi | ✅ |
+| Claude rad etadi | offline natija + xato matni | ✅ |
+| Offline rejim, 5 ta namuna | hammasi "verified" | ✅ |
+
+Natija: **28/28 test o'tdi.**
