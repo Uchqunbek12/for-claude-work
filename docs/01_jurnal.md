@@ -188,3 +188,92 @@ Natija: **9/9 test o'tdi.**
 - ✅ funksiya signaturasi va parametrlarini ajratish (IDA'ning `@<eax>` kabi yozuvlari bilan ham)
 - ✅ global ma'lumotlarni o'qish
 - ✅ avtomatik testlar
+
+---
+
+## 3-bosqich. Statik tahlil — LLM'siz, bepul detektorlar
+
+### 3.1. Nima uchun LLM'dan oldin statik tahlil
+1. **Pul tejash:** oddiy holatlarni (masalan, `(a&b)*2 + (a^b)` = `a+b`) dastur o'zi
+   topadi, LLM'ga murojaat qilish shart emas.
+2. **LLM xatolarini kamaytirish:** LLM'ga "bu shart har doim yolg'on, 3000 test bilan
+   isbotlangan" degan aniq dalillarni beramiz, u taxmin qilib o'tirmaydi.
+3. **Offline rejim:** API kalitsiz ham vosita foydali natija beradi.
+
+### 3.2. Asosiy g'oya: ifoda kalkulyatori (`deobf_agent/expr.py`)
+C tilidagi ifodani Python ichida hisoblaydigan kichik interpretator yozildi:
+- **tokenizer** matnni bo'laklarga ajratadi: `(a ^ b) + 2u` → `(`, `a`, `^`, `b`, `)`, `+`, `2u`;
+- **Pratt parser** bo'laklardan daraxt (AST) quradi va amallar ustuvorligini hisobga oladi
+  (`*` amali `+` dan oldin bajariladi va h.k.);
+- **hisoblash** C qoidalarini takrorlaydi: 32 bitda "aylanib ketish" (`0xFFFFFFFF + 1 = 0`),
+  ishorali va ishorasiz taqqoslash farqi (`(int)x < 0` va `x < 0`), `(unsigned char)` kabi
+  tur o'zgartirishlar.
+
+Bu kalkulyator ustiga ikki "tasodifiy test" usuli qurildi:
+- `is_constant(ifoda)` — ifodani 3000 ta tasodifiy qiymat bilan hisoblaydi. Natija doim bir
+  xil chiqsa, ifoda aslida **konstanta**. Opaque predicate'lar shu yo'l bilan topiladi;
+- `equivalent(a, b)` — ikki ifoda barcha testlarda bir xil natija beradimi? MBA
+  soddalashtirish shunga tayanadi.
+
+### 3.3. Detektorlar (`deobf_agent/detectors.py`)
+
+| Detektor | Qanday ishlaydi |
+|---|---|
+| **MBA** | Ifodada ham arifmetik (`+ - *`), ham bit (`& \| ^ ~`) amallari bo'lsa, oddiy nomzodlarni (`x`, `~x`, `x+y`, `x^y`, `x+1`, ...) birma-bir sinab, tasodifiy testda **teng** chiqqanini taklif qiladi. Bu "sintez orqali soddalashtirish" deyiladi |
+| **Yashirin konstantalar** | Faqat sonlardan iborat ifodani (`0x7A1C3E55 ^ 0xFB00A390`) hisoblab, bitta songa aylantiradi |
+| **Opaque predicate** | `if`/`while` shartlari va `a ? b : c` dagi shartlarni `is_constant` bilan tekshiradi |
+| **O'lik kod** | Qiymat beriladigan, lekin hech qayerda **o'qilmaydigan** o'zgaruvchilarni topadi (`junk ^= h` kabi faqat o'ziga ishlatilganlar ham hisobga olinadi) |
+| **Flattening** | `while(1)` ichidagi `switch(state)` ni topadi, har bir `case` dan keyingi holatni ajratib, **holatlar xaritasini** tiklaydi. IDA/Ghidra'dagi `if`-zanjiri ko'rinishini ham taniydi |
+| **Kodlangan satrlar** | Global ma'lumot yoki stekdagi baytlarni koddagi `^ KALIT` qiymatlari bilan ochib ko'radi. Kalit topilmasa, 255 ta kalitning hammasini sinab, eng "matnga o'xshash" natijani tanlaydi |
+| **Mashhur konstantalar** | FNV, CRC32, TEA, MD5, SHA kabi algoritmlarning "sehrli" sonlarini taniydi. Bu funksiya nima qilishini tushunishga katta yordam beradi |
+
+`s3_flatten` uchun tiklangan holatlar xaritasi (angr psevdokodidan):
+```
+Holat o'zgaruvchisi: v3; boshlang'ich holat: 15391
+  holat 15391 -> 24071 [agar !v0] | 37282 [agar v0]
+  holat 24071 -> return (chiqish)
+  holat 37282 -> 11117
+  holat 11117 -> 15391
+```
+Bu xaritadan ko'rinadiki, 15391 → 37282 → 11117 → 15391 halqasi aslida **`while (v0 != 0)` tsikli**,
+24071 esa tsikldan chiqish.
+
+### 3.4. Topilgan va tuzatilgan muammolar
+| Muammo | Tuzatish |
+|---|---|
+| `unsigned int s = (a^b) + ...` — e'lon bilan birga qiymat berish tahlil qilinmagan | gapni "e'lon + qiymat" shaklida ajratish qo'shildi |
+| `^ 0x5Cu` dagi `u` qo'shimchasi sabab kalit tanilmagan, natijada tanlash usuli noto'g'ri kalit (0x5F) bilan ma'nosiz matn chiqargan | regex tuzatildi, tanlash usuli endi "tabiiy tilga o'xshashlik" (e, t, a, o, bo'sh joy ulushi) bo'yicha baholaydi |
+| Taqqoslash ifodalari (`... != 0`) MBA deb ham belgilangan | taqqoslash/mantiqiy ifodalar MBA detektoridan chiqarildi, ular opaque predicate detektorining ishi |
+| Shartlarda "MBA bo'lishi mumkin" degan noaniq ogohlantirishlar shovqin bergan | noaniq ogohlantirish faqat >=2 arifmetik va >=2 bit amali bo'lgan holatda chiqariladi |
+
+**🔎 Kuzatuv:** `s5_combined` ning angr psevdokodida ham `s2` dagi angr xatosi takrorlangan:
+`((i*i + i) & 1) != 0` (har doim yolg'on) sharti `(v2 & 1) * ((v2 & 1) + 1)` ga aylangan va toq
+sonlarda rostga chiqadi. Lekin bu shart ostida faqat **keraksiz** `v3` o'zgaruvchisi o'zgaradi,
+shuning uchun funksiya natijasi buzilmaydi (differensial test ham shuni tasdiqlagan).
+
+### 3.5. Metrikalar (`deobf_agent/metrics.py`)
+Deobfuskatsiya natijasini **raqamlar bilan** baholash uchun:
+- **qatorlar soni**;
+- **tsiklomatik murakkablik (CC)**: 1 + tarmoqlanishlar soni (`if`, `while`, `case`, `&&`, ...).
+  Bu dasturiy injiniringda keng tarqalgan o'lchov (McCabe, 1976).
+
+| Namuna | toza (qator / CC) | obfuskatsiyalangan | angr psevdokodi |
+|---|---|---|---|
+| s1_mba | 4 / 1 | 6 / 1 | 10 / 1 |
+| s2_opaque | 6 / 3 | 15 / 7 | 17 / 7 |
+| s3_flatten | 6 / 2 | 22 / 7 | 28 / 7 |
+| s4_strings | 4 / 1 | 9 / 2 | 10 / 2 |
+| s5_combined | 8 / 2 | 32 / 9 | 42 / 9 |
+
+Agentning maqsadi — psevdokod ustunidagi raqamlarni "toza" ustundagi qiymatlarga yaqinlashtirish.
+
+### 3.6. Testlar
+`tests/test_detectors.py` qo'shildi: MBA, opaque predicate, flattening, satrlar, o'lik kod,
+metrikalar. Muhim test — **toza kodda soxta topilma (false positive) yo'qligi**.
+Natija: **17/17 test o'tdi.**
+
+### 3-bosqich natijasi
+- ✅ C ifoda kalkulyatori va tasodifiy test asosidagi isbotlash
+- ✅ 7 ta detektor: barcha 5 namunada barcha obfuskatsiya usullari topildi
+- ✅ flattening uchun holatlar xaritasini tiklash
+- ✅ murakkablik metrikalari
