@@ -248,7 +248,7 @@ def run_offline(func: FunctionInfo, analysis: AnalysisResult, preamble: str = ""
                + (f": {', '.join(TECH_NAMES_UZ.get(t, t) for t in techniques)}." if techniques else
                   "; obfuskatsiya belgilari topilmadi.")
                + (f" {len(changes)} ta ifoda isbotlangan holda soddalashtirildi." if changes else "")
-               + (" " + " ".join(known) if known else "")
+               + ("".join(f" {k}." for k in known) if known else "")
                + " To'liq tushuntirish va boshqaruv oqimini tiklash uchun LLM rejimidan foydalaning.")
     return DeobfResult(
         function_name=func.name,

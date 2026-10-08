@@ -423,3 +423,67 @@ lekin avtomatik solishtirib bo'lmadi, masalan funksiya ko'rsatkich qabul qiladi)
 | Offline rejim, 5 ta namuna | hammasi "verified" | ✅ |
 
 Natija: **28/28 test o'tdi.**
+
+---
+
+## 6-bosqich. CLI, hisobot va Web UI
+
+### 6.1. Hisobot (`deobf_agent/report.py`)
+Bitta natija uch formatda chiqariladi:
+| Format | Kim uchun |
+|---|---|
+| **Markdown** (`.md`) | GitHub'da yoki matn muharririda o'qish; hisobotga ko'chirish |
+| **HTML** (`.html`) | brauzerda ochiladigan chiroyli hisobot (Web UI bilan bir xil ko'rinish) |
+| **JSON** (`.json`) | boshqa dasturlar uchun (mashina o'qiydigan format) |
+
+Ko'rsatishda funksiya nomi Claude taklif qilgan mazmunli nomga almashtiriladi
+(`sub_401136` → `compute_checksum`). Tekshiruvda esa asl nom ishlatiladi.
+
+### 6.2. CLI — buyruq qatori (`deobf_agent/cli.py`)
+`argparse` — Python'ning buyruq qatori argumentlarini o'qish uchun standart kutubxonasi.
+`pyproject.toml` dagi `[project.scripts]` bo'limi tufayli o'rnatilgandan keyin `deobf` buyrug'i paydo bo'ladi.
+```bash
+deobf analyze kod.c                      # Claude Haiku (standart, arzon)
+deobf analyze kod.c --model sonnet       # kuchliroq model — bitta parametr bilan
+deobf analyze kod.c --offline            # bepul, LLM'siz
+deobf analyze kod.c -f sub_401136 --format html -o hisobot.html
+deobf functions kod.c                    # fayldagi funksiyalar ro'yxati
+deobf web                                # brauzer interfeysi
+deobf eval --offline                     # namunalar bo'yicha baholash (7-bosqich)
+```
+Jarayon xabarlari `stderr` ga, hisobot esa `stdout` ga chiqadi. Shuning uchun hisobotni faylga
+yo'naltirish mumkin: `deobf analyze kod.c > natija.md`. Windows konsolida o'zbekcha harflar buzilmasligi
+uchun chiqish UTF-8 ga sozlanadi.
+
+### 6.3. Web UI (`deobf_agent/web/`)
+**Flask** — Python'dagi eng oddiy veb-freymvork. **Jinja2** shablonlari HTML sahifani ma'lumotlar
+bilan to'ldiradi va matnni avtomatik **ekranlaydi** (escape). Ya'ni psevdokod ichida
+`<script>` bo'lsa ham, u bajarilmaydi, oddiy matn sifatida ko'rsatiladi. Bu XSS hujumidan himoya
+qiladi va test bilan tekshirilgan.
+
+Sahifa imkoniyatlari:
+- psevdokodni joylash yoki fayl yuklash; **5 ta namunani bir bosishda yuklash** (himoyada namoyish uchun qulay);
+- dvigatel tanlash: **Haiku (standart) / Sonnet / Opus / Offline**;
+- natija: holat belgisi (✅/🟡/❌), metrikalar (qatorlar, murakkablik, narx, vaqt), asl va toza kod
+  yonma-yon (sintaksis ranglari bilan), bloklar bo'yicha tushuntirish, qayta nomlashlar, statik
+  tahlil topilmalari, urinishlar tarixi;
+- natijani Markdown / HTML / JSON ko'rinishida yuklab olish.
+
+**Xavfsizlik:** server faqat `127.0.0.1` da (shu kompyuterning o'zida) ochiladi, chunki u sizning API
+kalitingiz bilan ishlaydi.
+
+### 6.4. Brauzerda tekshirish (Playwright + Chromium)
+Sahifa haqiqatan ishlashini ko'rish uchun **Playwright** (brauzerni dastur orqali boshqarish vositasi)
+yordamida Chromium ochildi: namuna tanlandi → "Tahlil qilish" bosildi → natija skrinshoti olindi.
+
+| Forma | Natija |
+|---|---|
+| ![forma](rasmlar/web_forma.png) | ![natija](rasmlar/web_natija.png) |
+
+**🔎 Topilgan muammo:** telefon kengligida (390px) sahifa 593px gacha kengayib, gorizontal aylantirish
+paydo bo'ldi. Sabab: CSS grid ichidagi kod bloklari torayolmagan. Grid elementlariga `min-width: 0`
+qo'shildi va qayta tekshiruvda kenglik aniq **390px** chiqdi.
+
+### 6.5. Testlar
+`tests/test_web.py`: bosh sahifa, offline tahlil va yuklab olish, soxta Claude bilan tahlil, bo'sh kirish
+xatosi, HTML ekranlash (XSS himoyasi). Natija: **33/33 test o'tdi.**

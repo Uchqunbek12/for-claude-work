@@ -1,0 +1,75 @@
+{# Natijalar qismi: Web UI va saqlanadigan HTML hisobotda bir xil ishlatiladi. #}
+<div class="panel">
+  <div class="stats">
+    <div class="stat"><div class="k">Kirish uslubi</div><div class="v">{{ style_names.get(data.style, data.style) }}</div></div>
+    <div class="stat"><div class="k">Funksiyalar</div><div class="v">{{ data.functions|length }}</div></div>
+    <div class="stat"><div class="k">Umumiy narx</div><div class="v">${{ "%.5f"|format(data.total_cost_usd) }}</div></div>
+  </div>
+</div>
+{% for f in data.functions %}
+<article class="panel">
+  <div class="fn-head">
+    <h2><code>{{ f.function }}</code> → <code>{{ f.suggested_name }}</code></h2>
+    <span class="badge status-{{ f.verification.status }}">{{ f.verification.label }}</span>
+  </div>
+  {% if f.error %}<div class="warn">⚠️ LLM xatosi: {{ f.error }} — natija offline tahlildan olindi.</div>{% endif %}
+  <div class="stats">
+    <div class="stat"><div class="k">Dvigatel</div><div class="v">{{ f.engine }}</div></div>
+    <div class="stat"><div class="k">Ishonch (model)</div><div class="v">{{ confidence_uz.get(f.result.confidence, f.result.confidence) }}</div></div>
+    <div class="stat"><div class="k">Qatorlar</div><div class="v">{{ f.metrics_before.lines }} → {{ f.metrics_after.lines }}</div></div>
+    <div class="stat"><div class="k">Tsiklomatik murakkablik</div><div class="v">{{ f.metrics_before.cyclomatic }} → {{ f.metrics_after.cyclomatic }}</div></div>
+    <div class="stat"><div class="k">Urinishlar</div><div class="v">{{ f.attempts|length }}</div></div>
+    <div class="stat"><div class="k">Narx</div><div class="v">${{ "%.5f"|format(f.usage.cost_usd) }}{% if f.usage.cache_hits %} (kesh){% endif %}</div></div>
+    <div class="stat"><div class="k">Vaqt</div><div class="v">{{ f.elapsed_sec }} s</div></div>
+  </div>
+
+  <h3>Qisqacha</h3>
+  <p>{{ f.result.summary }}</p>
+  {% if f.result.techniques %}
+  <div class="chips">{% for t in f.result.techniques %}<span class="chip">{{ tech_names.get(t, t) }}</span>{% endfor %}</div>
+  {% endif %}
+
+  <div class="code-grid">
+    <div><h3>Asl psevdokod</h3><pre><code class="language-c">{{ f.original_numbered }}</code></pre></div>
+    <div><h3>Soddalashtirilgan C kod</h3><pre><code class="language-c">{{ f.display_code }}</code></pre></div>
+  </div>
+
+  {% if f.result.blocks %}
+  <h3>Bloklar bo'yicha tushuntirish</h3>
+  {% for b in f.result.blocks %}
+  <details class="block" open>
+    <summary>{{ loop.index }}. {{ b.title }} <span class="muted">— qatorlar {{ b.original_lines }}</span></summary>
+    <div class="block-body">
+      <pre><code class="language-c">{{ b.original_code }}</code></pre>
+      {% if b.simplified_code %}<pre><code class="language-c">{{ b.simplified_code }}</code></pre>{% endif %}
+    </div>
+    <p>{{ b.explanation }}</p>
+  </details>
+  {% endfor %}
+  {% endif %}
+
+  {% if f.result.renames %}
+  <h3>Qayta nomlashlar</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Eski</th><th>Yangi</th><th>Sabab</th></tr>
+    {% for r in f.result.renames %}<tr><td><code>{{ r.old }}</code></td><td><code>{{ r.new }}</code></td><td>{{ r.reason }}</td></tr>{% endfor %}
+  </table></div>
+  {% endif %}
+
+  {% if f.static_findings %}
+  <h3>Statik tahlil topilmalari (LLM'siz, bepul)</h3>
+  <ul class="findings">
+    {% for x in f.static_findings %}
+    <li><b>{{ tech_names.get(x.technique, x.technique) }}</b>, {{ x.line }}-qator{% if x.verified %} <span class="badge status-verified">isbotlangan</span>{% endif %}: {{ x.message.split("\n")[0] }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% for sm in f.state_machines %}<h3>Flattening: holatlar xaritasi</h3><pre>{{ sm }}</pre>{% endfor %}
+
+  <h3>Tekshiruv tafsilotlari</h3>
+  <ul class="findings">
+    {% for a in f.attempts %}<li>{{ a.round }}-urinish: <span class="badge status-{{ a.status }}">{{ a.status }}</span> <span class="muted">{{ a.details.split("\n")[0] }}</span></li>{% endfor %}
+  </ul>
+  {% if f.result.notes %}<h3>Eslatmalar</h3><p>{{ f.result.notes }}</p>{% endif %}
+</article>
+{% endfor %}
