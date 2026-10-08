@@ -120,11 +120,33 @@ def build_harness_source(ret_type: str, param_types: list[str], n_tests: int, se
     return "\n".join(lines) + "\n"
 
 
+def data_support_code(data_blobs: dict[str, bytes], code: str) -> str | None:
+    """Kodda ishlatilgan, lekin unda aniqlanmagan global ma'lumotlar uchun C massivlar yaratadi.
+
+    Masalan, angr psevdokodida `extern char ENC;` bor, baytlar esa izohda. Bu funksiya
+    `unsigned char ENC[27] = {0x14, ...};` ni alohida faylda yaratadi — bog'lovchi (linker)
+    ENC nomini shu massivga ulaydi va psevdokodni haqiqiy ma'lumotlar bilan ishga tushirish mumkin bo'ladi.
+    """
+    out = []
+    for name, data in data_blobs.items():
+        if not re.fullmatch(r"[A-Za-z_]\w*", name) or not re.search(rf"\b{name}\b", code):
+            continue
+        if re.search(rf"\b{name}\s*\[[^\]]*\]\s*=", code):      # kodning o'zida aniqlangan
+            continue
+        values = ", ".join(f"0x{b:02X}" for b in data)
+        out.append(f"unsigned char {name}[{len(data)}] = {{ {values} }};")
+    return "\n".join(out) + "\n" if out else None
+
+
 def differential_test(code_a: str, func_a: str, code_b: str, func_b: str,
                       ret_type: str, param_types: list[str],
                       n_tests: int = 2000, timeout: float = 10.0,
-                      workdir: Path | None = None) -> DiffResult:
-    """code_a ichidagi func_a va code_b ichidagi func_b ni solishtiradi."""
+                      workdir: Path | None = None, support_code: str | None = None) -> DiffResult:
+    """code_a ichidagi func_a va code_b ichidagi func_b ni solishtiradi.
+
+    support_code — qo'shimcha C kod (masalan, binar fayldan olingan global ma'lumotlar),
+    u alohida kompilyatsiya qilinib, test dasturiga bog'lanadi.
+    """
     if not is_integer_type(ret_type):
         return DiffResult("skipped", details=f"Qaytish turi butun son emas: '{ret_type}'")
     bad = [p for p in param_types if not is_integer_type(p)]
@@ -148,8 +170,14 @@ def differential_test(code_a: str, func_a: str, code_b: str, func_b: str,
         res_h, obj_h = compiler.compile_object(harness, wd, "harness")
         if not res_h.ok:
             return DiffResult("inconclusive", details="Test dasturi kompilyatsiya bo'lmadi:\n" + res_h.errors)
+        objects = [obj_a, obj_b, obj_h]
+        if support_code:
+            res_s, obj_s = compiler.compile_object(support_code, wd, "support")
+            if not res_s.ok:
+                return DiffResult("inconclusive", details="Yordamchi kod kompilyatsiya bo'lmadi:\n" + res_s.errors)
+            objects.append(obj_s)
         exe = wd / "difftest.exe"
-        res_l = compiler.link([obj_a, obj_b, obj_h], exe)
+        res_l = compiler.link(objects, exe)
         if not res_l.ok:
             return DiffResult("inconclusive",
                               details="Bog'lash (link) bo'lmadi — ehtimol tashqi funksiya yoki global "

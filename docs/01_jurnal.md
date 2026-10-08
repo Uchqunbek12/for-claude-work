@@ -277,3 +277,104 @@ Natija: **17/17 test o'tdi.**
 - ✅ 7 ta detektor: barcha 5 namunada barcha obfuskatsiya usullari topildi
 - ✅ flattening uchun holatlar xaritasini tiklash
 - ✅ murakkablik metrikalari
+
+---
+
+## 4-bosqich. LLM agent (Claude) va offline rejim
+
+### 4.1. Virtual muhit (`.venv`)
+Kutubxonalarni tizim Python'iga o'rnatmoqchi bo'lganimizda paketlar ziddiyati chiqdi
+(`blinker` paketini tizim boshqaruvchisi o'rnatgan ekan). Yechim — **virtual muhit**:
+```bash
+python -m venv .venv                 # loyiha uchun alohida Python muhiti
+.venv/bin/pip install -e ".[dev]"    # loyiha va uning kutubxonalarini o'rnatish
+```
+Virtual muhit loyiha kutubxonalarini boshqa dasturlardan ajratadi. Bu Python'dagi standart amaliyot.
+
+### 4.2. Claude API bilan ishlashning asosiy tushunchalari
+| Tushuncha | Ma'nosi | Loyihada |
+|---|---|---|
+| **Token** | Model o'qiydigan/yozadigan matn bo'lagi (~3–4 harf) | Narx tokenlar soniga qarab hisoblanadi |
+| **Model** | Haiku (arzon) → Sonnet → Opus (eng kuchli) | Default `haiku`, `--model sonnet/opus` bilan bir zumda almashtiriladi |
+| **Effort** | Modelning "o'ylash" chuqurligi | `low/medium/high`, default `medium` |
+| **Structured output** | Javob aniq sxema bo'yicha keladi | `schema.py` dagi `DeobfResult` |
+| **Prompt caching** | O'zgarmas qism serverda keshlanadi, keyingi so'rovda ~10x arzon | Tuzatish so'rovlarida avvalgi suhbat keshdan o'qiladi |
+| **Disk kesh** | Bir xil so'rov qayta yuborilmaydi | `.deobf_cache/` papkasi, takroriy tahlil = **$0** |
+
+### 4.3. Javob sxemasi (`deobf_agent/schema.py`)
+Erkin matn o'rniga Claude quyidagi tuzilmani qaytaradi (pydantic modeli):
+- `c_code` — kompilyatsiya qilinadigan toza C funksiya (**nomi va parametrlari aslidagidek**,
+  aks holda differensial testni o'tkazib bo'lmaydi);
+- `blocks` — har bir blok uchun: psevdokoddagi qatorlar → soddalashtirilgan kod → **o'zbekcha tushuntirish**;
+- `renames` — `v3 → state`, `a1 → divisor` kabi qayta nomlashlar va sababi;
+- `summary`, `techniques`, `confidence`, `notes`.
+
+**Nima uchun:** dastur javobni ishonchli o'qiy oladi (kod qayerda, izoh qayerda); Web UI va hisobot
+uni chiroyli ko'rsatadi; offline rejim ham aynan shu tuzilmani qaytaradi.
+
+### 4.4. Prompt (`deobf_agent/prompts.py`)
+- **Tizim ko'rsatmasi (system prompt)** — o'zgarmas: Claude'ning roli, obfuskatsiya usullari va
+  kod uchun qat'iy qoidalar (nom va parametrlarni saqlash, ma'lumotlarni `static` qilish,
+  ishonchsiz joyda asl mantiqni saqlab, `notes` ga yozish).
+- **Foydalanuvchi xabari** — o'zgaruvchan: raqamlangan psevdokod, global ma'lumotlar baytlari,
+  **statik tahlil faktlari** (`VERIFIED` belgisi bilan — "bu tasodifiy test bilan isbotlangan, ishon"),
+  holatlar xaritasi, tushuntirish tili.
+
+**Nima uchun ko'rsatmalar ingliz tilida:** modellar ingliz tilidagi ko'rsatmalarga eng aniq amal
+qiladi va ingliz matni kamroq token egallaydi, ya'ni arzonroq. Tushuntirishlar esa tanlangan tilda
+(`uz`, `ru`, `en`) yoziladi.
+
+### 4.5. Claude moduli (`deobf_agent/llm.py`)
+- `resolve_model("haiku")` → `claude-haiku-5-5` (aliaslar: `haiku`, `sonnet`, `opus`; `DEOBF_MODEL`
+  muhit o'zgaruvchisi bilan ham tanlanadi);
+- `ClaudeSession.ask()` — so'rov yuboradi. Suhbat tarixi **faqat oxiriga qo'shiladi**, shunda tuzatish
+  so'rovlarida oldingi qism prompt keshidan o'qiladi;
+- **xatolar** foydalanuvchiga tushunarli o'zbekcha xabarga aylantiriladi: noto'g'ri kalit, limit,
+  internet yo'qligi, model rad etishi (`refusal`), javob kesilishi (`max_tokens`);
+- **narx hisoblagich**: har so'rovdan keyin token soni va $ narxi yig'iladi;
+- **API kalit** `.env` faylida saqlanadi (`ANTHROPIC_API_KEY=...`). `.env` esa `.gitignore` da, shuning uchun
+  kalit GitHub'ga tushib qolmaydi.
+
+Taxminiy narxlar (1 million token uchun, $):
+
+| Model | Kirish | Chiqish |
+|---|---|---|
+| Haiku 5.5 (default) | 0.10 | 0.50 |
+| Sonnet 5.5 | 2.00 | 10.00 |
+| Opus 5.5 | 4.00 | 20.00 |
+
+### 4.6. Offline rejim (`deobf_agent/offline.py`)
+API kalitsiz ishlaydi va xuddi shu `DeobfResult` ni qaytaradi:
+1. isbotlangan MBA soddalashtirishlari va konstantalarni kodga qo'llaydi;
+2. soxta shartlarni `0`/`1` ga almashtiradi, so'ng **o'lik tarmoqlarni kesadi**
+   (`if (0) {...} else X` → `X`);
+3. keraksiz o'zgaruvchilarni (e'lon va qiymat berishlarni) olib tashlaydi;
+4. flattening xaritasi va dekodlangan satrlarni kod boshida izoh qilib yozadi.
+
+Natijalar (angr psevdokodi → offline natija, barchasi differensial testdan o'tdi):
+
+| Namuna | Ekvivalent | CC | Qatorlar |
+|---|---|---|---|
+| s1_mba | ✅ | 1 → 1 | 10 → 10 (MBA → `a0 + a1`, `a0 - a1`) |
+| s2_opaque | ✅ | 7 → 5 | 17 → 12 |
+| s3_flatten | ✅ | 7 → 7 | 28 → 28 (faqat xarita izohi) |
+| s4_strings | ✅ | 2 → 2 | satr dekodlandi |
+| s5_combined | ✅ | 9 → 8 | 42 → 37 |
+
+**Xulosa:** offline rejim ifodalar darajasida yaxshi ishlaydi, lekin **boshqaruv oqimini (flattening)
+qayta qurish va mazmunli nomlar berish** uchun "tushunish" kerak. Bu LLM rejimining vazifasi.
+
+### 4.7. Global ma'lumotlarni testga ulash
+`s4` ning psevdokodi `extern char ENC;` ga murojaat qiladi, baytlar esa binar faylda. Differensial
+testga **qo'shimcha fayl** qo'shildi: `unsigned char ENC[27] = {0x14, ...};`. Bog'lovchi (linker)
+`ENC` nomini shu massivga ulaydi. Natijada `s4` psevdokodi ham to'liq sinovdan o'tdi va asl kod bilan ekvivalent chiqdi.
+
+### 4.8. Testlar — soxta mijoz (fake client)
+Bu muhitda Claude API kaliti yo'q. Shuning uchun haqiqiy mijoz o'rniga **soxta mijoz** (`tests/fakes.py`)
+yozildi. U oldindan berilgan javoblarni qaytaradi va yuborilgan so'rovlarni eslab qoladi. Shu yo'l bilan
+tekshiriladi: so'rov to'g'ri tuzilganmi (model, effort, kesh), narx to'g'ri hisoblanadimi, suhbat tarixi
+faqat oxiriga qo'shiladimi, disk kesh ishlaydimi (2-so'rov API'ga bormaydi), rad etish va kesilish
+to'g'ri qayta ishlanadimi.
+Natija: **22/22 test o'tdi.**
+
+> ⚠️ Haqiqiy Claude javobi bilan sinov API kaliti bor kompyuterda o'tkaziladi (yo'riqnomada yoziladi).

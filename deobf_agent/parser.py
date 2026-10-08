@@ -229,5 +229,13 @@ def parse(text: str) -> ParsedInput:
             last_boundary = i
             continue
         i += 1
+    # Funksiyalardan tashqaridagi qism: extern e'lonlar, typedef, global massivlar
+    preamble, pos = [], 0
+    for f in functions:
+        start = text.find(f.text, pos)
+        preamble.append(text[pos:start])
+        pos = start + len(f.text)
+    preamble.append(text[pos:])
     return ParsedInput(style=detect_style(text), functions=functions,
-                       data_blobs=parse_data_blobs(text), raw=text)
+                       data_blobs=parse_data_blobs(text), raw=text,
+                       preamble="".join(preamble).strip())

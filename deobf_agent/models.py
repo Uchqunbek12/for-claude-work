@@ -46,6 +46,7 @@ class ParsedInput:
     functions: list[FunctionInfo]
     data_blobs: dict[str, bytes] = field(default_factory=dict)
     raw: str = ""
+    preamble: str = ""      # funksiyalardan tashqaridagi matn (e'lonlar, global o'zgaruvchilar)
 
     def get(self, name: str) -> FunctionInfo | None:
         return next((f for f in self.functions if f.name == name), None)

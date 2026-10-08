@@ -1,0 +1,223 @@
+"""Claude API bilan ishlash: model tanlash, so'rov yuborish, narx hisoblash, kesh.
+
+Asosiy tushunchalar:
+  * token — model matnni o'qiydigan va yozadigan "bo'lak" (taxminan 3-4 harf).
+    API narxi tokenlar soniga qarab hisoblanadi: kirish (input) va chiqish (output) alohida.
+  * model — default "haiku" (Claude Haiku 5.5, eng arzon). --model sonnet / opus bilan
+    kuchliroq modelga bir zumda o'tish mumkin.
+  * effort — modelning "o'ylash" chuqurligi (low / medium / high). Pastroq = arzonroq va tezroq.
+  * structured output — javob aniq sxema (schema.DeobfResult) bo'yicha keladi.
+  * prompt caching — so'rovning o'zgarmas boshlang'ich qismi (ko'rsatmalar) API serverida
+    keshlanadi; keyingi so'rovlarda u ~10 barobar arzon hisoblanadi.
+  * disk kesh — bir xil kod uchun bir xil so'rovni qayta yubormaymiz: javob diskdan olinadi ($0).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+
+from .prompts import PROMPT_VERSION, SYSTEM_PROMPT
+from .schema import DeobfResult
+
+MODEL_ALIASES = {
+    "haiku": "claude-haiku-5-5",
+    "sonnet": "claude-sonnet-5-5",
+    "opus": "claude-opus-5-5",
+}
+DEFAULT_MODEL = "haiku"
+
+# Narxlar: AQSH dollari / 1 million token. (kirish, chiqish, kesh-yozish, kesh-o'qish)
+# Taxminiy qiymatlar — aniq va eng so'nggi narxlar: https://www.anthropic.com/pricing
+PRICES = {
+    "claude-haiku-5-5": (0.10, 0.50, 0.125, 0.01),
+    "claude-sonnet-5-5": (2.00, 10.00, 2.50, 0.20),
+    "claude-opus-5-5": (4.00, 20.00, 5.00, 0.20),
+}
+
+EFFORTS = ("low", "medium", "high")
+
+
+class LLMError(Exception):
+    """LLM bilan bog'liq xato (foydalanuvchiga tushunarli matn bilan)."""
+
+
+def resolve_model(name: str | None) -> str:
+    """'haiku' -> 'claude-haiku-5-5'. To'liq model nomi berilsa, o'zgarishsiz qaytariladi."""
+    name = (name or os.environ.get("DEOBF_MODEL") or DEFAULT_MODEL).strip()
+    return MODEL_ALIASES.get(name.lower(), name)
+
+
+def load_dotenv(path: Path = Path(".env")) -> None:
+    """.env faylidan ANTHROPIC_API_KEY=... kabi qatorlarni o'qiydi (agar hali o'rnatilmagan bo'lsa).
+
+    API kalitni kod ichida yozish xavfli (u GitHub'ga tushib qolishi mumkin), shuning
+    uchun u .env faylida saqlanadi, .env esa .gitignore ro'yxatida.
+    """
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+@dataclass
+class UsageStats:
+    """Token sarfi va narx (bir nechta so'rov bo'yicha yig'indisi)."""
+
+    requests: int = 0
+    cache_hits: int = 0              # diskdagi keshdan olingan javoblar ($0)
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_write_tokens: int = 0
+    cache_read_tokens: int = 0
+    cost_usd: float = 0.0
+
+    def add_response(self, usage, model: str) -> None:
+        p_in, p_out, p_cw, p_cr = PRICES.get(model, PRICES["claude-opus-5-5"])
+        cw = getattr(usage, "cache_creation_input_tokens", 0) or 0
+        cr = getattr(usage, "cache_read_input_tokens", 0) or 0
+        self.requests += 1
+        self.input_tokens += usage.input_tokens
+        self.output_tokens += usage.output_tokens
+        self.cache_write_tokens += cw
+        self.cache_read_tokens += cr
+        self.cost_usd += (usage.input_tokens * p_in + usage.output_tokens * p_out
+                          + cw * p_cw + cr * p_cr) / 1_000_000
+
+    def merge(self, other: "UsageStats") -> None:
+        for k, v in asdict(other).items():
+            setattr(self, k, getattr(self, k) + v)
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["cost_usd"] = round(self.cost_usd, 6)
+        return d
+
+
+class DiskCache:
+    """Oddiy fayl keshi: har bir javob alohida JSON faylda, nomi — so'rovning SHA-256 xeshi."""
+
+    def __init__(self, directory: Path | str = ".deobf_cache"):
+        self.dir = Path(directory)
+
+    def _path(self, key: str) -> Path:
+        return self.dir / f"{key}.json"
+
+    def get(self, key: str) -> dict | None:
+        p = self._path(key)
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return None
+        return None
+
+    def set(self, key: str, value: dict) -> None:
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self._path(key).write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+
+
+@dataclass
+class ClaudeSession:
+    """Bitta funksiya bo'yicha Claude bilan suhbat: birinchi so'rov + tuzatish so'rovlari.
+
+    Suhbat tarixi faqat oxiriga qo'shib boriladi (o'zgartirilmaydi) — bu prompt keshi
+    ishlashi uchun muhim: oldingi qism bayt-ma-bayt bir xil qolsa, u keshdan o'qiladi.
+    """
+
+    model: str = field(default_factory=lambda: resolve_model(None))
+    effort: str = "medium"
+    max_tokens: int = 16000
+    cache: DiskCache | None = None
+    client: object = None
+    messages: list = field(default_factory=list)
+    usage: UsageStats = field(default_factory=UsageStats)
+
+    def _client(self):
+        if self.client is None:
+            import anthropic  # faqat kerak bo'lganda yuklanadi (offline rejimda shart emas)
+
+            try:
+                self.client = anthropic.Anthropic()
+            except anthropic.AnthropicError as exc:
+                raise LLMError(f"Claude API mijozini yaratib bo'lmadi: {exc}. "
+                               "ANTHROPIC_API_KEY ni .env fayliga yozing yoki --offline rejimidan foydalaning.")
+        return self.client
+
+    def _cache_key(self) -> str:
+        payload = json.dumps({"v": PROMPT_VERSION, "model": self.model, "effort": self.effort,
+                              "system": SYSTEM_PROMPT, "messages": self.messages},
+                             sort_keys=True, ensure_ascii=False)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def ask(self, user_text: str) -> DeobfResult:
+        self.messages.append({"role": "user", "content": user_text})
+        key = self._cache_key()
+        hit = self.cache.get(key) if self.cache else None
+        if hit:
+            self.usage.cache_hits += 1
+            content, result = hit["content"], DeobfResult.model_validate(hit["result"])
+        else:
+            content, result = self._call_api()
+            if self.cache:
+                self.cache.set(key, {"model": self.model, "content": content, "result": result.model_dump()})
+        self.messages.append({"role": "assistant", "content": content})
+        return result
+
+    def _call_api(self) -> tuple[list, DeobfResult]:
+        import anthropic
+
+        client = self._client()
+        try:
+            response = client.messages.parse(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                system=SYSTEM_PROMPT,
+                messages=self.messages,
+                output_format=DeobfResult,
+                output_config={"effort": self.effort},
+                # Avtomatik prompt keshi: so'rovning oxirgi blokigacha bo'lgan qism keshlanadi,
+                # tuzatish so'rovlarida oldingi suhbat qayta to'liq narxda hisoblanmaydi.
+                extra_body={"cache_control": {"type": "ephemeral"}},
+            )
+        except anthropic.AuthenticationError:
+            raise LLMError("API kalit noto'g'ri yoki yo'q (ANTHROPIC_API_KEY). console.anthropic.com dan kalit oling.")
+        except anthropic.PermissionDeniedError as exc:
+            raise LLMError(f"Ruxsat yo'q: {exc.message}")
+        except anthropic.NotFoundError:
+            raise LLMError(f"Model topilmadi: {self.model}. --model haiku|sonnet|opus dan birini tanlang.")
+        except anthropic.RateLimitError:
+            raise LLMError("So'rovlar limiti oshib ketdi (rate limit). Bir oz kutib, qayta urinib ko'ring.")
+        except anthropic.BadRequestError as exc:
+            raise LLMError(f"So'rov rad etildi (400): {exc.message}")
+        except anthropic.APIStatusError as exc:
+            raise LLMError(f"Claude API xatosi ({exc.status_code}): {exc.message}")
+        except anthropic.APIConnectionError:
+            raise LLMError("Claude API ga ulanib bo'lmadi — internet aloqasini tekshiring.")
+        except anthropic.AnthropicError as exc:
+            raise LLMError(f"Claude API xatosi: {exc}")
+
+        self.usage.add_response(response.usage, self.model)
+        if response.stop_reason == "refusal":
+            detail = ""
+            if response.stop_details is not None:
+                detail = f" ({getattr(response.stop_details, 'category', '') or ''})"
+            raise LLMError(f"Model so'rovni bajarishdan bosh tortdi{detail}. Boshqa model bilan urinib "
+                           "ko'ring (--model sonnet) yoki offline rejimdan foydalaning.")
+        if response.stop_reason == "max_tokens":
+            raise LLMError("Javob token limitiga yetib kesildi. --max-tokens qiymatini oshiring yoki "
+                           "funksiyani kichikroq qismlarga bo'ling.")
+        result = response.parsed_output
+        if result is None:
+            raise LLMError("Model javobini sxema bo'yicha o'qib bo'lmadi.")
+        # Javobni tarixga qo'shish uchun JSON ko'rinishiga o'tkazamiz (thinking bloklari ham saqlanadi —
+        # keyingi tuzatish so'rovida ular o'zgarishsiz qaytarilishi kerak).
+        content = [b.model_dump(mode="json", exclude_none=True) for b in response.content]
+        return content, result
