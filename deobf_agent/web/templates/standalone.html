@@ -1,13 +1,15 @@
 <!doctype html>
 <html lang="uz">
 <head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deobfuskatsiya hisoboti</title>
-{% include "_head.html" %}
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" onload="hljs.highlightAll()"></script>
+{% include "_style.html" %}
 </head>
 <body>
 <main>
-  <h1>Deobfuskatsiya hisoboti</h1>
-  <p class="lead">deobf-agent tomonidan yaratilgan</p>
+  <header><h1>Deobfuskatsiya hisoboti</h1><span>deobf-agent</span></header>
   {% include "_report.html" %}
 </main>
 </body>

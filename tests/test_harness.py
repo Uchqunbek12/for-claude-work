@@ -30,9 +30,19 @@ def test_equivalent_and_mismatch():
 
 
 @needs_cc
-def test_skipped_for_pointers():
-    r = harness.differential_test("", "f", "", "f", "int", ["char *"])
+def test_skipped_for_unsupported_type():
+    # double kabi turlar hali qo'llab-quvvatlanmaydi -> test o'tkazib yuboriladi
+    r = harness.differential_test("", "f", "", "f", "int", ["double"])
     assert r.status == "skipped"
+
+
+@needs_cc
+def test_pointer_buffer_equivalent():
+    # Ko'rsatkich (bufer) parametri bo'lgan funksiyalar endi sinaladi: bufer to'ldiriladi va solishtiriladi.
+    a = "void f(unsigned char *p, int n) { for (int i = 0; i < n; i++) p[i] ^= 0x5Au; }"
+    b = "void f(unsigned char *p, int n) { for (int i = 0; i < n; i++) p[i] = p[i] ^ 90; }"
+    r = harness.differential_test(a, "f", b, "f", "void", ["unsigned char *", "int"])
+    assert r.status == "equivalent", r.details
 
 
 @needs_cc

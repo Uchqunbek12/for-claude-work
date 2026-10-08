@@ -35,9 +35,8 @@ def evaluate_sample(s: dict, cfg: AgentConfig, source: str = "angr") -> dict | N
     clean = (SAMPLES / "src" / "clean" / f"{s['id']}.c").read_text(encoding="utf-8")
     parsed, reports = deobfuscate_text(text, cfg, function=s["function"])
     rep = reports[0]
-    support = harness.data_support_code(parsed.data_blobs, rep.result.c_code)
     truth = harness.differential_test(clean, s["function"], rep.result.c_code, s["function"],
-                                      s["ret"], s["params"], n_tests=5000, support_code=support)
+                                      s["ret"], s["params"], n_tests=5000, data_blobs=parsed.data_blobs)
     expected = set(s.get("pseudocode_techniques", s["techniques"]))
     found = set(rep.analysis.techniques()) | set(rep.result.techniques)
     recall = len(expected & found) / len(expected) if expected else 1.0

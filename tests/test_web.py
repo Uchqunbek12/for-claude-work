@@ -2,7 +2,9 @@
 
 from pathlib import Path
 
-from deobf_agent import report
+import pytest
+
+from deobf_agent import report, sandbox
 from deobf_agent.agent import AgentConfig, deobfuscate_text
 from deobf_agent.web.app import create_app
 from tests.fakes import FakeClient, FakeResponse, make_result
@@ -41,6 +43,38 @@ def test_empty_input_error():
     client = create_app().test_client()
     html = client.post("/analyze", data={"code": "  ", "engine": "offline"}).get_data(as_text=True)
     assert "Psevdokod kiritilmadi" in html
+
+
+@pytest.fixture
+def public_app(monkeypatch):
+    # Public rejim DEOBF_PUBLIC orqali yoqiladi; test uchun to'g'ridan-to'g'ri o'rnatamiz.
+    monkeypatch.setattr(sandbox, "PUBLIC", True)
+    return create_app()
+
+
+def test_public_mode_security_and_byok(public_app):
+    c = public_app.test_client()
+    r = c.get("/")
+    assert r.headers["X-Frame-Options"] == "DENY"
+    assert "cdnjs.cloudflare.com" in r.headers["Content-Security-Policy"]
+    assert 'name="api_key"' in r.get_data(as_text=True)          # tashrif buyuruvchi o'z kalitini kiritadi
+    assert public_app.config["CACHE_DIR"] is None                # public rejimda disk kesh o'chirilgan
+    # Claude modeli kalitsiz rad etiladi
+    h = c.post("/analyze", data={"code": "int f(int a){return a+0;}", "engine": "sonnet"}).get_data(as_text=True)
+    assert "API kalitingizni kiriting" in h
+    # offline rejim kalitsiz ishlaydi
+    assert "status-" in c.post("/analyze", data={"code": "int f(int a){return a+0;}",
+                                                  "engine": "offline"}).get_data(as_text=True)
+
+
+def test_public_mode_rejects_include_and_long_input(public_app):
+    c = public_app.test_client()
+    h = c.post("/analyze", data={"code": "#include <stdio.h>\nint f(int a){return a;}",
+                                 "engine": "offline"}).get_data(as_text=True)
+    assert "#include" in h
+    h = c.post("/analyze", data={"code": "int f(){return 0;}\n" + "//x\n" * 20000,
+                                 "engine": "offline"}).get_data(as_text=True)
+    assert "juda uzun" in h
 
 
 def test_report_formats_escape_html():

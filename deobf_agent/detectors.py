@@ -24,7 +24,7 @@ from itertools import permutations
 
 from . import expr as E
 from .models import Finding, FunctionInfo
-from .parser import _mask_comments_and_strings
+from .parser import find_close, mask_code, split_top_level
 
 # Mashhur algoritmlarning konstantalari: topilsa, funksiya nima qilishini tushunishga yordam beradi.
 KNOWN_CONSTANTS = {
@@ -77,59 +77,10 @@ class AnalysisResult:
     decoded_strings: dict[str, str] = field(default_factory=dict)
 
     def techniques(self) -> list[str]:
-        seen: list[str] = []
-        for f in self.findings:
-            if f.technique not in seen:
-                seen.append(f.technique)
-        return seen
+        return list(dict.fromkeys(f.technique for f in self.findings))
 
 
 # ====================================================================== yordamchilar
-
-_PREC = {"||": 1, "&&": 2, "|": 3, "^": 4, "&": 5, "==": 6, "!=": 6, "<": 7, ">": 7, "<=": 7, ">=": 7,
-         "<<": 8, ">>": 8, "+": 9, "-": 9, "*": 10, "/": 10, "%": 10}
-
-
-def to_c(node, parent_prec: int = 0) -> str:
-    """AST daraxtidan qayta C matni yasaydi (kerakli joyda qavslar bilan)."""
-    kind = node[0]
-    if kind == "num":
-        v = node[1]
-        return hex(v) if v > 255 else str(v)
-    if kind == "var":
-        return node[1]
-    if kind == "cast":
-        return f"({'unsigned ' if not node[2] else ''}{ {8: 'char', 16: 'short', 32: 'int', 64: 'long long'}[node[1]] }){to_c(node[3], 11)}"
-    if kind == "un":
-        return f"{node[1]}{to_c(node[2], 11)}"
-    if kind == "cond":
-        s = f"{to_c(node[1], 1)} ? {to_c(node[2])} : {to_c(node[3])}"
-        return f"({s})" if parent_prec > 0 else s
-    if kind == "bin":
-        p = _PREC[node[1]]
-        s = f"{to_c(node[2], p)} {node[1]} {to_c(node[3], p + 1)}"
-        return f"({s})" if p < parent_prec else s
-    return "?"
-
-
-_NEGATED = {"==": "!=", "!=": "==", "<": ">=", ">=": "<", ">": "<=", "<=": ">"}
-
-
-def negate(node) -> str:
-    """Shartning inkorini o'qishga qulay ko'rinishda yozadi: !(a < b) -> a >= b, !(!x) -> x."""
-    if node[0] == "un" and node[1] == "!":
-        return to_c(node[2])
-    if node[0] == "bin" and node[1] in _NEGATED:
-        return to_c(("bin", _NEGATED[node[1]], node[2], node[3]))
-    return f"!({to_c(node)})"
-
-
-def _subnodes(node):
-    yield node
-    for child in node[1:]:
-        if isinstance(child, tuple):
-            yield from _subnodes(child)
-
 
 @dataclass
 class _Stmt:
@@ -138,22 +89,15 @@ class _Stmt:
     headers: list[str] # oldidagi if(...)/while(...) shartlari
 
 
-def _balanced(text: str, start: int) -> int:
-    """text[start] == '(' bo'lsa, mos ')' indeksini qaytaradi."""
-    depth = 0
-    for i in range(start, len(text)):
-        if text[i] == "(":
-            depth += 1
-        elif text[i] == ")":
-            depth -= 1
-            if depth == 0:
-                return i
-    return len(text) - 1
+def _close_paren(text: str, start: int) -> int:
+    """text[start] == '(' bo'lsa, mos ')' indeksi (yopilmagan bo'lsa — matn oxiri)."""
+    j = find_close(text, start, "()")
+    return len(text) - 1 if j < 0 else j
 
 
 def _statements(func: FunctionInfo) -> list[_Stmt]:
     """Funksiya tanasini oddiy gaplarga ajratadi (';', '{', '}' bo'yicha)."""
-    masked = _mask_comments_and_strings(func.text)
+    masked = mask_code(func.text)
     body_start = masked.find("{")
     out: list[_Stmt] = []
     i, n = body_start + 1, len(masked)
@@ -161,7 +105,7 @@ def _statements(func: FunctionInfo) -> list[_Stmt]:
     while i < n:
         ch = masked[i]
         if ch == "(":
-            i = _balanced(masked, i) + 1
+            i = _close_paren(masked, i) + 1
             continue
         if ch in ";{}":
             chunk = masked[cur_start:i]
@@ -189,56 +133,70 @@ def _peel_headers(chunk: str) -> tuple[list[str], str]:
         m = re.match(r"^(if|while|for|switch)\s*\(", chunk)
         if m:
             open_idx = chunk.index("(", m.start(1))
-            close = _balanced(chunk, open_idx)
+            close = _close_paren(chunk, open_idx)
             headers.append(chunk[open_idx + 1:close])
             chunk = chunk[close + 1:].lstrip()
             continue
         return headers, chunk.strip()
 
 
-_ASSIGN_RE = re.compile(r"^([A-Za-z_]\w*)\s*(=|\+=|-=|\*=|\^=|\|=|&=|<<=|>>=)(?!=)\s*(.+)$", re.S)
 _DECL_PREFIX_RE = re.compile(r"^((?:[A-Za-z_]\w*\s+)+\**\s*)(?=[A-Za-z_*])")
 _NOT_TYPES = {"return", "goto", "case", "else", "do", "if", "while", "for", "switch", "break", "continue", "sizeof"}
 
 
-def _split_stmt(text: str) -> tuple[list[tuple[str, str, str | None]], bool]:
-    """Gapdan o'zgaruvchilarga qiymat berishlarni ajratadi.
+def _split_stmt(text: str) -> list[tuple[str, str, str | None]]:
+    """Gapdan qiymat berishlarni ajratadi: [(chap_tomon, operator, o'ng_tomon yoki None)].
 
-    Natija: ([(nom, operator, o'ng_tomon yoki None)], bu_e'lonmi)
-      'v1 = a0 + 1'                    -> [('v1', '=', 'a0 + 1')], False
-      'unsigned int h = 0u, junk = 0u' -> [('h', '=', '0u'), ('junk', '=', '0u')], True
-      'int v2'                         -> [('v2', '=', None)], True
+      'v1 = a0 + 1'                    -> [('v1', '=', 'a0 + 1')]
+      'unsigned int h = 0u, junk = 0u' -> [('h', '=', '0u'), ('junk', '=', '0u')]   (e'lon)
+      'int v2'                         -> [('v2', '=', None)]                         (e'lon)
+      'buf[i] ^= k'                    -> [('buf[i]', '^=', 'k')]                     (murakkab chap tomon)
     """
-    m = _ASSIGN_RE.match(text)
-    if m:
-        return [(m.group(1), m.group(2), m.group(3).strip())], False
     d = _DECL_PREFIX_RE.match(text)
     if d and not (set(d.group(1).split()) & _NOT_TYPES):
         out = []
-        for part in _split_top(text[d.end():]):
-            part = part.strip().lstrip("*").strip()
+        for part in split_top_level(text[d.end():]):
+            part = part.lstrip("*").strip()
             pm = re.match(r"^([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*(?:=\s*(.+))?$", part, re.S)
             if not pm:
-                return [], False
+                return []
             out.append((pm.group(1), "=", pm.group(2).strip() if pm.group(2) else None))
-        return out, True
-    return [], False
+        return out
+    found = _find_assign(text)
+    return [found] if found else []
 
 
-def _split_top(s: str) -> list[str]:
-    parts, depth, cur = [], 0, []
-    for ch in s:
-        if ch in "([{":
+def is_declaration(text: str) -> bool:
+    d = _DECL_PREFIX_RE.match(text)
+    return bool(d) and not (set(d.group(1).split()) & _NOT_TYPES)
+
+
+def _find_assign(text: str) -> tuple[str, str, str] | None:
+    """Qavslardan tashqaridagi birinchi qiymat berish operatorini topadi (==, <=, >=, != hisobga olinmaydi)."""
+    depth = 0
+    for i, ch in enumerate(text):
+        if ch in "([":
             depth += 1
-        elif ch in ")]}":
+        elif ch in ")]":
             depth -= 1
-        if ch == "," and depth == 0:
-            parts.append("".join(cur))
-            cur = []
-        else:
-            cur.append(ch)
-    parts.append("".join(cur))
-    return parts
+        elif ch == "=" and depth == 0:
+            prev = text[i - 1] if i else ""
+            nxt = text[i + 1] if i + 1 < len(text) else ""
+            if nxt == "=" or prev in "=!":
+                return None
+            op_start = i
+            if prev in "+-*/%&|^":
+                op_start = i - 1
+            elif prev in "<>":
+                if i >= 2 and text[i - 2] == prev:
+                    op_start = i - 2
+                else:
+                    return None                    # <= yoki >= — taqqoslash
+            lhs, rhs = text[:op_start].strip(), text[i + 1:].strip()
+            if lhs and rhs:
+                return lhs, text[op_start:i + 1], rhs
+            return None
+    return None
 
 
 def _expressions(func: FunctionInfo):
@@ -247,7 +205,7 @@ def _expressions(func: FunctionInfo):
         for h in st.headers:
             if h.count(";") == 0:
                 yield st.line, h, "cond"
-        assigns, _ = _split_stmt(st.text)
+        assigns = _split_stmt(st.text)
         for _, _, rhs in assigns:
             if rhs:
                 yield st.line, rhs, "rhs"
@@ -255,6 +213,32 @@ def _expressions(func: FunctionInfo):
             r = st.text[len("return"):].strip()
             if r:
                 yield st.line, r, "return"
+
+
+def var_types(func: FunctionInfo) -> E.Types:
+    """Funksiya o'zgaruvchilarining turlari: parametrlar va e'lonlardan. {nom: (bitlar, ishorali)}
+
+    Bu muhim: `int v2; if (v2 < 0)` dagi shart ishorali sonda ma'noli, ishorasizda esa doim yolg'on.
+    Turi aniqlanmagan o'zgaruvchilar uchun kalkulyator barcha talqinlarni sinaydi.
+    """
+    types: E.Types = {}
+    for p in func.params:
+        t = E.type_info(p.type)
+        if t:
+            types[p.name] = t
+    for st in _statements(func):
+        d = _DECL_PREFIX_RE.match(st.text)
+        if not d or not is_declaration(st.text):
+            continue
+        base = d.group(1)
+        for part in split_top_level(st.text[d.end():]):
+            m = re.match(r"(\**)\s*([A-Za-z_]\w*)\s*(\[)?", part.strip())
+            if not m:
+                continue
+            t = (64, False) if (m.group(1) or m.group(3) or "*" in base) else E.type_info(base)
+            if t:
+                types[m.group(2)] = t
+    return types
 
 
 def _try_parse(text: str):
@@ -299,22 +283,90 @@ def _candidates(names: list[str], consts: list[int]):
                 yield f"{a} {o1} {b} {o2} {c}"
 
 
-def simplify_mba(node) -> str | None:
+def simplify_mba(node, types: E.Types | None = None) -> str | None:
     """MBA ifodaga teng oddiy ifodani qidiradi (tasodifiy test bilan tasdiqlanadi)."""
     names = E.variables(node)
-    if not names or len(names) > 3:
+    if not names:
         return None
-    for cand in _candidates(names, E.constants(node)):
+    for cand in _candidates(names, E.constants(node)) if len(names) <= 3 else ():
         cnode = _try_parse(cand)
-        if cnode is not None and E.equivalent(node, cnode, n=600) and E.equivalent(node, cnode, n=3000):
+        if cnode is not None and E.equivalent(node, cnode, 600, types) and E.equivalent(node, cnode, 3000, types):
+            return cand
+    cand = _linear_fit(node, names, types)
+    if cand is not None:
+        cnode = _try_parse(cand)
+        if cnode is not None and E.equivalent(node, cnode, 3000, types):
             return cand
     return None
+
+
+def _term(coef: int, expr: str) -> str:
+    """Koeffitsient va ifodani o'qishga qulay qo'shiluvchiga aylantiradi: (5, 'x') -> '+ x * 5'."""
+    coef &= 0xFFFFFFFF
+    if coef > 0x7FFFFFFF:
+        sign, coef = "-", (-coef) & 0xFFFFFFFF
+    else:
+        sign = "+"
+    body = expr if coef == 1 else (str(coef) if expr == "1" else f"{expr} * {coef}")
+    return f"{sign} {body}"
+
+
+def _linear_fit(node, names: list[str], types: E.Types | None = None) -> str | None:
+    """Chiziqli MBA ni "koeffitsientlarni topish" orqali soddalashtiradi (SiMBA / MBA-Blast g'oyasi).
+
+    1-2 o'zgaruvchili har qanday chiziqli MBA quyidagi shaklda yoziladi:
+        c0 + c1*x + c2*y + c3*(x & y)
+    Koeffitsientlar ifodani 4 nuqtada (x, y in {0, 1}) hisoblash orqali topiladi:
+        c0 = E(0,0);  c1 = E(1,0) - c0;  c2 = E(0,1) - c0;  c3 = E(1,1) - c0 - c1 - c2
+    Natija baribir tasodifiy test bilan tekshiriladi (chiziqli bo'lmagan ifodalar o'tmaydi).
+    """
+    if not 1 <= len(names) <= 2:
+        return None
+
+    def ev(*vals):
+        return E.evaluate(node, dict(zip(names, vals)), types)[0] & 0xFFFFFFFF
+
+    try:
+        if len(names) == 1:
+            c0 = ev(0)
+            coefs = [(ev(1) - c0, names[0])]
+        else:
+            c0 = ev(0, 0)
+            c1, c2 = ev(1, 0) - c0, ev(0, 1) - c0
+            c3 = ev(1, 1) - c0 - c1 - c2
+            x, y = names
+            coefs = [(c1, x), (c2, y), (c3, f"({x} & {y})")]
+            # k*x + k*y - k*(x&y) = k*(x | y);  k*x + k*y - 2k*(x&y) = k*(x ^ y)
+            k = c1 & 0xFFFFFFFF
+            if k and (c2 & 0xFFFFFFFF) == k:
+                if (c3 + k) & 0xFFFFFFFF == 0:
+                    coefs = [(k, f"({x} | {y})")]
+                elif (c3 + 2 * k) & 0xFFFFFFFF == 0:
+                    coefs = [(k, f"({x} ^ {y})")]
+    except E.ExprError:
+        return None
+    terms = [_term(c, e) for c, e in coefs if c & 0xFFFFFFFF] + ([_term(c0, "1")] if c0 else [])
+    if not terms:
+        return "0"
+    text = " ".join(terms)
+    return text[2:] if text.startswith("+ ") else "-" + text[2:]
 
 
 _LOGIC_OPS = {"==", "!=", "<", ">", "<=", ">=", "&&", "||"}
 
 
-def detect_mba_and_constants(func: FunctionInfo) -> list[Finding]:
+def is_logic(node) -> bool:
+    """Taqqoslash/mantiqiy ifoda (==, <, &&, !, a ? b : c) — bular MBA emas, opaque predicate detektoriga tegishli."""
+    return node[0] == "cond" or (node[0] == "bin" and node[1] in _LOGIC_OPS) or (node[0] == "un" and node[1] == "!")
+
+
+def looks_like_mba(node) -> bool:
+    """MBA belgisi: kamida bitta arifmetik va bitta bit amali, jami kamida 3 ta amal."""
+    arith, bitw = E.count_ops(node)
+    return arith >= 1 and bitw >= 1 and arith + bitw >= 3
+
+
+def detect_mba_and_constants(func: FunctionInfo, types: E.Types | None = None) -> list[Finding]:
     findings: list[Finding] = []
     for line, text, kind in _expressions(func):
         root = _try_parse(text)
@@ -323,9 +375,9 @@ def detect_mba_and_constants(func: FunctionInfo) -> list[Finding]:
         done: list = []   # allaqachon hisobotga kirgan (katta) tugunlar — ularning ichini qayta ko'rmaymiz
 
         def covered(n):
-            return any(n is d or any(n is s for s in _subnodes(d)) for d in done)
+            return any(n is d or any(n is s for s in E.subnodes(d)) for d in done)
 
-        for node in _subnodes(root):
+        for node in E.subnodes(root):
             if covered(node) or node[0] in ("num", "var"):
                 continue
             # 1) Faqat konstantalardan iborat ifoda -> bitta songa yig'ish
@@ -336,59 +388,56 @@ def detect_mba_and_constants(func: FunctionInfo) -> list[Finding]:
                     continue
                 note = KNOWN_CONSTANTS.get(v & 0xFFFFFFFF, "")
                 findings.append(Finding(
-                    technique="encoded_constants", line=line, snippet=to_c(node), suggestion=str(v),
-                    message=f"Konstanta yashirilgan: `{to_c(node)}` = {v} (0x{v:X})" + (f" — {note}" if note else ""),
+                    technique="encoded_constants", line=line, snippet=E.to_c(node), suggestion=str(v),
+                    message=f"Konstanta yashirilgan: `{E.to_c(node)}` = {v} (0x{v:X})" + (f" — {note}" if note else ""),
                     confidence=1.0, verified=True))
                 done.append(node)
                 continue
-            # 2) MBA: kamida bitta arifmetik va bitta bit amali, jami >= 3 amal.
-            # Taqqoslash/mantiqiy ifodalar (==, !, &&) MBA emas — ular opaque predicate detektoriga tegishli.
-            if node[0] == "cond" or (node[0] == "bin" and node[1] in _LOGIC_OPS) or (node[0] == "un" and node[1] == "!"):
+            # 2) MBA
+            if is_logic(node) or not looks_like_mba(node):
                 continue
-            arith, bitw = E.count_ops(node)
-            if arith >= 1 and bitw >= 1 and arith + bitw >= 3:
-                simple = simplify_mba(node)
-                if simple and simple.replace(" ", "") != to_c(node).replace(" ", ""):
-                    findings.append(Finding(
-                        technique="mba", line=line, snippet=to_c(node), suggestion=simple,
-                        message=f"MBA ifoda: `{to_c(node)}` aslida `{simple}` ga teng "
-                                f"(3000+ tasodifiy test bilan tekshirildi)",
-                        confidence=0.95, verified=True))
-                    done.append(node)
-                elif node is root and kind != "cond" and arith >= 2 and bitw >= 2:
-                    findings.append(Finding(
-                        technique="mba", line=line, snippet=to_c(node),
-                        message="Murakkab aralash arifmetik-mantiqiy ifoda (MBA bo'lishi mumkin), "
-                                "oddiy ekvivalenti avtomatik topilmadi",
-                        confidence=0.4))
-                    done.append(node)
+            simple = simplify_mba(node, types)
+            if simple and simple.replace(" ", "") != E.to_c(node).replace(" ", ""):
+                findings.append(Finding(
+                    technique="mba", line=line, snippet=E.to_c(node), suggestion=simple,
+                    message=f"MBA ifoda: `{E.to_c(node)}` aslida `{simple}` ga teng "
+                            f"(3000 ta tasodifiy test bilan tekshirildi)",
+                    confidence=0.95, verified=True))
+                done.append(node)
+            elif node is root and kind != "cond" and min(E.count_ops(node)) >= 2:
+                findings.append(Finding(
+                    technique="mba", line=line, snippet=E.to_c(node),
+                    message="Murakkab aralash arifmetik-mantiqiy ifoda (MBA bo'lishi mumkin), "
+                            "oddiy ekvivalenti avtomatik topilmadi",
+                    confidence=0.4))
+                done.append(node)
     return findings
 
 
 # ====================================================================== opaque predicate
 
-def detect_opaque_predicates(func: FunctionInfo) -> list[Finding]:
+def detect_opaque_predicates(func: FunctionInfo, types: E.Types | None = None) -> list[Finding]:
     findings: list[Finding] = []
     for line, text, kind in _expressions(func):
         root = _try_parse(text)
         if root is None:
             continue
         conds = [root] if kind == "cond" else []
-        conds += [n[1] for n in _subnodes(root) if n[0] == "cond"]       # a ? b : c ichidagi shartlar
+        conds += [n[1] for n in E.subnodes(root) if n[0] == "cond"]       # a ? b : c ichidagi shartlar
         for c in conds:
             if not E.variables(c):
                 continue                                                  # while(1) — oddiy cheksiz tsikl
             # Shart ichidagi ba'zi qismlar (&& bilan bog'langan) alohida ham tekshiriladi
-            parts = [c] + [n for n in _subnodes(c) if n is not c and n[0] == "bin"
+            parts = [c] + [n for n in E.subnodes(c) if n is not c and n[0] == "bin"
                            and n[1] in ("==", "!=", "<", ">", "<=", ">=", "&", "%") and E.variables(n)]
             for part in parts:
-                val = E.is_constant(part, n=3000)
+                val = E.is_constant(part, 3000, types)
                 if val is None:
                     continue
                 truth = "ROST" if val else "YOLG'ON"
                 findings.append(Finding(
-                    technique="opaque_predicate", line=line, snippet=to_c(part), suggestion=str(int(bool(val))),
-                    message=f"Soxta shart (opaque predicate): `{to_c(part)}` har doim {truth} "
+                    technique="opaque_predicate", line=line, snippet=E.to_c(part), suggestion=str(int(bool(val))),
+                    message=f"Soxta shart (opaque predicate): `{E.to_c(part)}` har doim {truth} "
                             f"(o'zgaruvchilar qiymatidan qat'i nazar, 3000 test)"
                             + (". Bu shart ostidagi kod hech qachon bajarilmaydi (o'lik kod)." if not val and part is c else ""),
                     confidence=0.9, verified=True))
@@ -408,19 +457,22 @@ def detect_dead_variables(func: FunctionInfo) -> list[Finding]:
         for h in st.headers:
             for name in re.findall(r"\b[A-Za-z_]\w*\b", h):
                 real_reads[name] = real_reads.get(name, 0) + 1
-        assigns, is_decl = _split_stmt(st.text)
-        if assigns:
-            for lhs, _, rhs in assigns:
-                if rhs is not None:
-                    defs.setdefault(lhs, []).append(st.line)
-                elif lhs not in defs:
-                    defs[lhs] = []
-                for name in re.findall(r"\b[A-Za-z_]\w*\b", rhs or ""):
-                    if name != lhs:
-                        real_reads[name] = real_reads.get(name, 0) + 1
-        else:
+        assigns = _split_stmt(st.text)
+        if not assigns:
             for name in re.findall(r"\b[A-Za-z_]\w*\b", st.text):
                 real_reads[name] = real_reads.get(name, 0) + 1
+            continue
+        for lhs, _, rhs in assigns:
+            if re.fullmatch(r"[A-Za-z_]\w*", lhs):
+                lines = defs.setdefault(lhs, [])
+                if rhs is not None:
+                    lines.append(st.line)
+            else:                                   # buf[i] = ... — bunda buf va i o'qiladi
+                for name in re.findall(r"\b[A-Za-z_]\w*\b", lhs):
+                    real_reads[name] = real_reads.get(name, 0) + 1
+            for name in re.findall(r"\b[A-Za-z_]\w*\b", rhs or ""):
+                if name != lhs:
+                    real_reads[name] = real_reads.get(name, 0) + 1
     findings = []
     for var, lines in defs.items():
         if var in params or real_reads.get(var, 0) > 0 or not lines:
@@ -438,18 +490,8 @@ def detect_dead_variables(func: FunctionInfo) -> list[Finding]:
 _FOREVER_RE = re.compile(r"\bwhile\s*\(\s*(?:1|true|1u)\s*\)|\bfor\s*\(\s*;\s*;\s*\)|\bdo\b")
 
 
-def _int_or_none(text: str) -> int | None:
-    node = _try_parse(text)
-    if node is not None and not E.variables(node):
-        try:
-            return E.evaluate(node, {})[0] & 0xFFFFFFFF
-        except E.ExprError:
-            return None
-    return None
-
-
 def detect_flattening(func: FunctionInfo) -> tuple[list[Finding], list[StateMachine]]:
-    masked = _mask_comments_and_strings(func.text)
+    masked = mask_code(func.text)
     if not _FOREVER_RE.search(masked):
         return [], []
     findings, machines = [], []
@@ -474,24 +516,23 @@ def detect_flattening(func: FunctionInfo) -> tuple[list[Finding], list[StateMach
         for k, lab in enumerate(labels):
             if lab.group(1) is None:
                 continue                                       # default: odatda tuzoq/qayta boshlash
-            state = _int_or_none(lab.group(1))
+            state = E.const_of(lab.group(1))
             if state is None:
                 continue
             seg = block[lab.end(): labels[k + 1].start() if k + 1 < len(labels) else len(block)]
             outs: list[tuple[str, int | None]] = []
             for am in re.finditer(rf"\b{var}\s*=\s*([^;]+);", seg):
                 rhs = am.group(1).strip()
-                const = _int_or_none(rhs)
+                const = E.const_of(rhs)
                 if const is not None:
                     outs.append(("", const))
                     assigned += 1
                     continue
                 node = _try_parse(rhs)
                 if node is not None and node[0] == "cond":
-                    a = E.evaluate(node[2], {})[0] & 0xFFFFFFFF if not E.variables(node[2]) else None
-                    b = E.evaluate(node[3], {})[0] & 0xFFFFFFFF if not E.variables(node[3]) else None
-                    outs.append((to_c(node[1]), a))
-                    outs.append((negate(node[1]), b))
+                    a, b = E.const_value(node[2]), E.const_value(node[3])
+                    outs.append((E.to_c(node[1]), a))
+                    outs.append((E.negate(node[1]), b))
                     assigned += 1
             if re.search(r"\breturn\b", seg):
                 sm.returns.append(state)
@@ -500,7 +541,7 @@ def detect_flattening(func: FunctionInfo) -> tuple[list[Finding], list[StateMach
             continue
         before = masked[:sw.start()]
         init = re.findall(rf"\b{var}\s*=\s*([^;]+);", before)
-        sm.initial = _int_or_none(init[-1]) if init else None
+        sm.initial = E.const_of(init[-1]) if init else None
         # Bajarilish tartibini (DFS) tiklaymiz — LLM uchun foydali "xarita"
         order, stack = [], [sm.initial] if sm.initial in sm.transitions else list(sm.transitions)[:1]
         while stack:
@@ -535,16 +576,6 @@ def detect_flattening(func: FunctionInfo) -> tuple[list[Finding], list[StateMach
 
 # ====================================================================== kodlangan satrlar
 
-def _printable_score(data: bytes) -> float:
-    if not data:
-        return 0.0
-    data = data.rstrip(b"\x00")
-    if not data:
-        return 0.0
-    ok = sum(1 for b in data if 32 <= b < 127 or b in (9, 10, 13))
-    return ok / len(data)
-
-
 def _text_score(data: bytes) -> float:
     """Matn "tabiiy tilga" qanchalik o'xshashi: eng ko'p uchraydigan harflar va bo'sh joy ulushi."""
     common = set(b"etaoinshrdlu ETAOINSHRDLU")
@@ -553,14 +584,15 @@ def _text_score(data: bytes) -> float:
 
 def _looks_like_text(data: bytes) -> bool:
     data = data.rstrip(b"\x00")
-    if len(data) < 4 or _printable_score(data) < 0.95:
+    printable = sum(1 for b in data if 32 <= b < 127 or b in (9, 10, 13))
+    if len(data) < 4 or printable / len(data) < 0.95:
         return False
     letters = sum(1 for b in data if chr(b).isalpha() or b == 32)
     return letters / len(data) >= 0.6
 
 
 def detect_encoded_strings(func: FunctionInfo, data_blobs: dict[str, bytes]) -> tuple[list[Finding], dict[str, str]]:
-    masked = _mask_comments_and_strings(func.text)
+    masked = mask_code(func.text)
     keys = []
     for k in re.findall(r"\^=?\s*(0x[0-9A-Fa-f]+|\d+)[uUlL]*\b", masked):
         v = int(k, 0)
@@ -613,7 +645,7 @@ def detect_encoded_strings(func: FunctionInfo, data_blobs: dict[str, bytes]) -> 
 
 
 def detect_known_constants(func: FunctionInfo) -> list[Finding]:
-    masked = _mask_comments_and_strings(func.text)
+    masked = mask_code(func.text)
     findings, seen = [], set()
     for m in re.finditer(r"\b(0x[0-9A-Fa-f]+|\d+)[uUlL]*\b", masked):
         v = int(m.group(1), 0) & 0xFFFFFFFF
@@ -629,9 +661,10 @@ def detect_known_constants(func: FunctionInfo) -> list[Finding]:
 
 def analyze(func: FunctionInfo, data_blobs: dict[str, bytes] | None = None) -> AnalysisResult:
     """Barcha detektorlarni ishga tushiradi."""
+    types = var_types(func)
     findings: list[Finding] = []
-    findings += detect_mba_and_constants(func)
-    findings += detect_opaque_predicates(func)
+    findings += detect_mba_and_constants(func, types)
+    findings += detect_opaque_predicates(func, types)
     flat, machines = detect_flattening(func)
     findings += flat
     findings += detect_dead_variables(func)

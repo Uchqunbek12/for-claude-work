@@ -20,7 +20,7 @@ import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .prompts import PROMPT_VERSION, SYSTEM_PROMPT
+from .prompts import SYSTEM_PROMPT
 from .schema import DeobfResult
 
 MODEL_ALIASES = {
@@ -39,6 +39,7 @@ PRICES = {
 }
 
 EFFORTS = ("low", "medium", "high")
+LANGUAGES = ("uz", "ru", "en")
 
 
 class LLMError(Exception):
@@ -128,39 +129,57 @@ def mask_key(key: str | None) -> str:
     return key[:12] + "..." + key[-4:] if len(key) > 20 else "***"
 
 
-def check_api_key(model: str | None = None, client=None) -> tuple[bool, str]:
+def _api_error_text(exc: Exception, model_id: str, key: str = "") -> str:
+    """Claude API xatosini foydalanuvchiga tushunarli o'zbekcha matnga aylantiradi."""
+    import anthropic
+
+    if isinstance(exc, anthropic.AuthenticationError):
+        return (f"Kalit noto'g'ri yoki bekor qilingan ({mask_key(key)}). "
+                "console.anthropic.com da yangi kalit yarating.")
+    if isinstance(exc, anthropic.PermissionDeniedError):
+        return f"Kalitga ruxsat yo'q: {exc.message}"
+    if isinstance(exc, anthropic.NotFoundError):
+        return f"'{model_id}' modeli topilmadi yoki sizga mavjud emas. Boshqa modelni tanlang (haiku, sonnet, opus)."
+    if isinstance(exc, anthropic.RateLimitError):
+        return "So'rovlar limiti oshib ketdi (rate limit). Bir oz kutib, qayta urinib ko'ring."
+    if isinstance(exc, anthropic.BadRequestError):
+        return f"So'rov rad etildi (400): {exc.message}"
+    if isinstance(exc, anthropic.APIStatusError):
+        return f"Claude API xatosi ({exc.status_code}): {exc.message}"
+    if isinstance(exc, anthropic.APIConnectionError):
+        return "Claude serveriga ulanib bo'lmadi — internet aloqasini tekshiring."
+    return f"Claude API xatosi: {exc}"
+
+
+def make_client(api_key: str | None = None):
+    """Claude mijozini yaratadi. api_key berilmasa — ANTHROPIC_API_KEY (yoki .env) dan olinadi."""
+    import anthropic
+
+    return anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+
+
+def check_api_key(model: str | None = None, client=None, api_key: str | None = None) -> tuple[bool, str]:
     """Kalit va model ishlayotganini tekshiradi.
 
     Models API (`models.retrieve`) chaqiriladi — bu matn generatsiya qilmaydi va BEPUL.
     Natija: (muvaffaqiyat, o'zbekcha xabar).
     """
+    import anthropic
+
     model_id = resolve_model(model)
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if client is None:
         if not key:
             return False, ("ANTHROPIC_API_KEY topilmadi. Loyiha papkasida .env fayli yarating va unga "
                            "ANTHROPIC_API_KEY=sk-ant-... qatorini yozing.")
         if not key.startswith("sk-ant-"):
             return False, f"Kalit 'sk-ant-' bilan boshlanmaydi ({mask_key(key)}) — to'liq nusxalanganini tekshiring."
-    import anthropic
-
     try:
-        client = client or anthropic.Anthropic()
-        info = client.models.retrieve(model_id)
-    except anthropic.AuthenticationError:
-        return False, f"Kalit noto'g'ri yoki bekor qilingan ({mask_key(key)}). console.anthropic.com da yangi kalit yarating."
-    except anthropic.PermissionDeniedError as exc:
-        return False, f"Kalitga ruxsat yo'q: {exc.message}"
-    except anthropic.NotFoundError:
-        return False, f"Kalit ishlayapti, lekin '{model_id}' modeli sizga mavjud emas. Boshqa modelni tanlang."
-    except anthropic.APIConnectionError:
-        return False, "Claude serveriga ulanib bo'lmadi — internet aloqasini tekshiring."
-    except anthropic.APIStatusError as exc:
-        return False, f"Claude API xatosi ({exc.status_code}): {exc.message}"
+        info = (client or make_client(api_key)).models.retrieve(model_id)
     except anthropic.AnthropicError as exc:
-        return False, f"Claude API xatosi: {exc}"
+        return False, _api_error_text(exc, model_id, key)
     name = getattr(info, "display_name", None) or model_id
-    return True, f"Kalit ishlayapti ✅ — model mavjud: {name} ({model_id})"
+    return True, f"Kalit ishlayapti — model mavjud: {name} ({model_id})"
 
 
 @dataclass
@@ -186,10 +205,6 @@ class UsageStats:
         self.cache_read_tokens += cr
         self.cost_usd += (usage.input_tokens * p_in + usage.output_tokens * p_out
                           + cw * p_cw + cr * p_cr) / 1_000_000
-
-    def merge(self, other: "UsageStats") -> None:
-        for k, v in asdict(other).items():
-            setattr(self, k, getattr(self, k) + v)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -233,6 +248,7 @@ class ClaudeSession:
     max_tokens: int = 16000
     cache: DiskCache | None = None
     client: object = None
+    api_key: str | None = None        # tashrif buyuruvchining o'z kaliti (public rejim); saqlanmaydi
     messages: list = field(default_factory=list)
     usage: UsageStats = field(default_factory=UsageStats)
 
@@ -241,14 +257,15 @@ class ClaudeSession:
             import anthropic  # faqat kerak bo'lganda yuklanadi (offline rejimda shart emas)
 
             try:
-                self.client = anthropic.Anthropic()
+                self.client = make_client(self.api_key)
             except anthropic.AnthropicError as exc:
                 raise LLMError(f"Claude API mijozini yaratib bo'lmadi: {exc}. "
                                "ANTHROPIC_API_KEY ni .env fayliga yozing yoki --offline rejimidan foydalaning.")
         return self.client
 
     def _cache_key(self) -> str:
-        payload = json.dumps({"v": PROMPT_VERSION, "model": self.model, "effort": self.effort,
+        # Sxema ham kalitga kiradi: javob tuzilmasi o'zgarsa, eski keshdagi javoblar ishlatilmaydi.
+        payload = json.dumps({"schema": DeobfResult.model_json_schema(), "model": self.model, "effort": self.effort,
                               "system": SYSTEM_PROMPT, "messages": self.messages},
                              sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -283,22 +300,8 @@ class ClaudeSession:
                 # tuzatish so'rovlarida oldingi suhbat qayta to'liq narxda hisoblanmaydi.
                 extra_body={"cache_control": {"type": "ephemeral"}},
             )
-        except anthropic.AuthenticationError:
-            raise LLMError("API kalit noto'g'ri yoki yo'q (ANTHROPIC_API_KEY). console.anthropic.com dan kalit oling.")
-        except anthropic.PermissionDeniedError as exc:
-            raise LLMError(f"Ruxsat yo'q: {exc.message}")
-        except anthropic.NotFoundError:
-            raise LLMError(f"Model topilmadi: {self.model}. --model haiku|sonnet|opus dan birini tanlang.")
-        except anthropic.RateLimitError:
-            raise LLMError("So'rovlar limiti oshib ketdi (rate limit). Bir oz kutib, qayta urinib ko'ring.")
-        except anthropic.BadRequestError as exc:
-            raise LLMError(f"So'rov rad etildi (400): {exc.message}")
-        except anthropic.APIStatusError as exc:
-            raise LLMError(f"Claude API xatosi ({exc.status_code}): {exc.message}")
-        except anthropic.APIConnectionError:
-            raise LLMError("Claude API ga ulanib bo'lmadi — internet aloqasini tekshiring.")
         except anthropic.AnthropicError as exc:
-            raise LLMError(f"Claude API xatosi: {exc}")
+            raise LLMError(_api_error_text(exc, self.model, self.api_key or os.environ.get("ANTHROPIC_API_KEY", ""))) from exc
 
         self.usage.add_response(response.usage, self.model)
         if response.stop_reason == "refusal":

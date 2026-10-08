@@ -64,12 +64,17 @@ def test_multiple_functions_and_struct_skipped():
 
 
 def test_angr_samples():
+    # Har bir namuna kamida bitta funksiyaga ega; s7_calls ikkita (rotl32 + rot_hash).
+    expected = {"s7_calls": 2}
     for path in sorted((ROOT / "samples" / "decompiled").glob("*.angr.c")):
         r = parser.parse(path.read_text(encoding="utf-8"))
         assert r.style == "angr", path.name
-        assert len(r.functions) == 1, path.name
+        assert len(r.functions) == expected.get(path.name.split(".")[0], 1), path.name
     s4 = parser.parse((ROOT / "samples" / "decompiled" / "s4_strings.angr.c").read_text())
     assert len(s4.data_blobs["ENC"]) == 27
+    s7 = parser.parse((ROOT / "samples" / "decompiled" / "s7_calls.angr.c").read_text())
+    assert [f.name for f in s7.functions] == ["rotl32", "rot_hash"]
+    assert s7.functions[1].calls == ["rotl32"]
 
 
 def test_normalize_type():

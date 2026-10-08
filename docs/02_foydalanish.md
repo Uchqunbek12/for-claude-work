@@ -211,6 +211,14 @@ IDA psevdokodi bilan baholash: namunalarni (`samples/bin/*.elf`) IDA'da ochib, h
 deobf eval --model haiku --source ida -o docs\baholash_haiku_ida.md
 ```
 
+### 5.5. Internetga chiqarish (demo rejimi)
+Vositani boshqalar ham ishlata oladigan qilib internetga qo'yish mumkin. Buning uchun **public rejim**
+bor: server kalit saqlamaydi, cheklovlar qattiq. Avval o'z kompyuteringizda sinab ko'ring:
+```bat
+deobf web --public
+```
+To'liq yo'riqnoma (Render.com, Docker, xavfsizlik): **[docs/04_internetga_chiqarish.md](04_internetga_chiqarish.md)**.
+
 ## 6. Natijani qanday o'qish kerak
 
 | Belgi | Ma'nosi |

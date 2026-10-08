@@ -12,12 +12,14 @@ import re
 from pathlib import Path
 
 from .agent import FunctionReport
+from .explain import TECH_NAMES_UZ
 from .models import ParsedInput
-from .offline import TECH_NAMES_UZ
 from .prompts import number_lines
 
 STYLE_NAMES = {"ida": "IDA (Hex-Rays)", "ghidra": "Ghidra", "angr": "angr", "c": "oddiy C"}
 CONFIDENCE_UZ = {"low": "past", "medium": "o'rta", "high": "yuqori"}
+# HTML shablonlar (Web UI va saqlanadigan hisobot) uchun umumiy o'zgaruvchilar
+TEMPLATE_GLOBALS = dict(tech_names=TECH_NAMES_UZ, style_names=STYLE_NAMES, confidence_uz=CONFIDENCE_UZ)
 
 
 def display_code(rep: FunctionReport) -> str:
@@ -43,7 +45,6 @@ def report_to_dict(rep: FunctionReport) -> dict:
         "error": rep.error,
         "elapsed_sec": rep.elapsed_sec,
         "original_code": rep.function.text,
-        "original_numbered": number_lines(rep.function.text),
         "display_code": display_code(rep),
         "result": rep.result.model_dump(),
         "static_findings": [f.to_dict() for f in rep.analysis.findings],
@@ -52,10 +53,13 @@ def report_to_dict(rep: FunctionReport) -> dict:
     }
 
 
-def to_json(parsed: ParsedInput, reports: list[FunctionReport]) -> str:
-    data = {"style": parsed.style, "functions": [report_to_dict(r) for r in reports],
+def to_data(parsed: ParsedInput, reports: list[FunctionReport]) -> dict:
+    return {"style": parsed.style, "functions": [report_to_dict(r) for r in reports],
             "total_cost_usd": round(sum(r.usage.cost_usd for r in reports), 6)}
-    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+def to_json(parsed: ParsedInput, reports: list[FunctionReport]) -> str:
+    return json.dumps(to_data(parsed, reports), ensure_ascii=False, indent=2)
 
 
 def _md_escape_cell(text: str) -> str:
@@ -80,11 +84,14 @@ def to_markdown(parsed: ParsedInput, reports: list[FunctionReport]) -> str:
             f"| Qatorlar | {mb.lines} → {ma.lines} |",
             f"| Tsiklomatik murakkablik | {mb.cyclomatic} → {ma.cyclomatic} |",
             f"| Urinishlar | {len(rep.attempts)} |",
-            f"| Tokenlar (kirish / chiqish) | {rep.usage.input_tokens} / {rep.usage.output_tokens} |",
+            f"| Tokenlar (kirish / chiqish / keshdan o'qilgan) | {rep.usage.input_tokens} / "
+            f"{rep.usage.output_tokens} / {rep.usage.cache_read_tokens} |",
             f"| Narx | ${rep.usage.cost_usd:.5f}" + (" (keshdan)" if rep.usage.cache_hits else "") + " |",
             f"| Vaqt | {rep.elapsed_sec} s |", "",
             "### Qisqacha", "", res.summary, "",
         ]
+        if res.simple_summary:
+            out += ["### Oddiy tilda (dehqoncha)", "", res.simple_summary, ""]
         if res.techniques:
             out += ["**Aniqlangan obfuskatsiya usullari:** "
                     + ", ".join(TECH_NAMES_UZ.get(t, t) for t in res.techniques), ""]
@@ -97,6 +104,8 @@ def to_markdown(parsed: ParsedInput, reports: list[FunctionReport]) -> str:
                 if b.simplified_code.strip():
                     out += ["Soddalashtirilgan:", "```c", b.simplified_code.rstrip(), "```"]
                 out += ["", b.explanation, ""]
+                if b.simple:
+                    out += [f"*Oddiy tilda:* {b.simple}", ""]
         if res.renames:
             out += ["### Qayta nomlashlar", "", "| Eski | Yangi | Sabab |", "|---|---|---|"]
             out += [f"| `{r.old}` | `{r.new}` | {_md_escape_cell(r.reason)} |" for r in res.renames]
@@ -104,7 +113,7 @@ def to_markdown(parsed: ParsedInput, reports: list[FunctionReport]) -> str:
         if rep.analysis.findings:
             out += ["### Statik tahlil topilmalari (LLM'siz)", ""]
             for f in rep.analysis.findings:
-                mark = " ✔ isbotlangan" if f.verified else ""
+                mark = " (test bilan tasdiqlangan)" if f.verified else ""
                 out.append(f"- **{TECH_NAMES_UZ.get(f.technique, f.technique)}**, {f.line}-qator{mark}: "
                            + f.message.split("\n")[0])
             out.append("")
@@ -126,11 +135,9 @@ def _jinja_env():
 
     env = Environment(loader=FileSystemLoader(str(Path(__file__).parent / "web" / "templates")),
                       autoescape=select_autoescape(["html"]))
-    env.globals.update(tech_names=TECH_NAMES_UZ, style_names=STYLE_NAMES, confidence_uz=CONFIDENCE_UZ)
+    env.globals.update(TEMPLATE_GLOBALS)
     return env
 
 
 def to_html(parsed: ParsedInput, reports: list[FunctionReport]) -> str:
-    env = _jinja_env()
-    data = json.loads(to_json(parsed, reports))
-    return env.get_template("standalone.html").render(data=data)
+    return _jinja_env().get_template("standalone.html").render(data=to_data(parsed, reports))

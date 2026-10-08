@@ -1,0 +1,11 @@
+# Render.com (bepul reja) uchun sozlama. Repozitoriyni ulab, "Blueprint" sifatida tanlang.
+# Batafsil: docs/04_internetga_chiqarish.md
+services:
+  - type: web
+    name: deobf-agent
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: DEOBF_PUBLIC
+        value: "1"

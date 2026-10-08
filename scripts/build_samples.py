@@ -38,7 +38,7 @@ def main() -> int:
         obf = (SAMPLES / "src" / "obf" / f"{sid}.c").read_text(encoding="utf-8")
 
         diff = harness.differential_test(clean, fn, obf, fn, s["ret"], s["params"], n_tests=20000)
-        print(f"[{sid}] toza vs obfuskatsiyalangan: {diff.label_uz} — {diff.details.splitlines()[0]}")
+        print(f"[{sid}] toza vs obfuskatsiyalangan: {diff.status} — {diff.details.splitlines()[0]}")
         all_ok &= diff.status == "equivalent"
 
         # Binar fayl: -O0 (optimizatsiyasiz), shunda obfuskatsiya kompilyator tomonidan
@@ -46,7 +46,9 @@ def main() -> int:
         # saqlanadi, shunda funksiyani nomi bo'yicha topish oson.
         out = SAMPLES / "bin" / f"{sid}.elf"
         src = SAMPLES / "src" / "obf" / f"{sid}.c"
-        main_stub = f"int main(void) {{ return (int){fn}({', '.join(['1'] * len(s['params']))}) & 1; }}\n"
+        args = ", ".join("0" if "*" in t else "1" for t in s["params"])
+        call = f"{fn}({args});" if s["ret"] == "void" else f"return (int){fn}({args}) & 1;"
+        main_stub = f"int main(void) {{ {call} return 0; }}\n"
         stub_path = SAMPLES / "bin" / f"_{sid}_main.c"
         stub_path.write_text(f"{s['ret']} {fn}({', '.join(s['params'])});\n" + main_stub, encoding="utf-8")
         proc = subprocess.run([cc, "-O0", "-fno-inline", "-o", str(out), str(src), str(stub_path)],

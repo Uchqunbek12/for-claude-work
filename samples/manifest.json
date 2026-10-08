@@ -86,6 +86,65 @@
         "mba",
         "dead_code"
       ]
+    },
+    {
+      "id": "s6_buffer",
+      "function": "xor_stream",
+      "ret": "void",
+      "params": [
+        "unsigned char *",
+        "unsigned int",
+        "unsigned char"
+      ],
+      "techniques": [
+        "control_flow_flattening",
+        "mba",
+        "opaque_predicate",
+        "dead_code"
+      ],
+      "pseudocode_techniques": [
+        "control_flow_flattening",
+        "mba",
+        "dead_code"
+      ],
+      "description": "Bufer ustida aylanma XOR; ko'rsatkichli parametr"
+    },
+    {
+      "id": "s7_calls",
+      "function": "rot_hash",
+      "ret": "unsigned int",
+      "params": [
+        "const unsigned char *",
+        "unsigned int"
+      ],
+      "techniques": [
+        "control_flow_flattening",
+        "mba",
+        "opaque_predicate",
+        "encoded_constants"
+      ],
+      "pseudocode_techniques": [
+        "control_flow_flattening",
+        "opaque_predicate"
+      ],
+      "description": "Yordamchi funksiyani chaqiruvchi xesh; ikki funksiya"
+    },
+    {
+      "id": "s8_sort",
+      "function": "bubble_sort",
+      "ret": "void",
+      "params": [
+        "int *",
+        "unsigned int"
+      ],
+      "techniques": [
+        "control_flow_flattening",
+        "mba"
+      ],
+      "pseudocode_techniques": [
+        "control_flow_flattening"
+      ],
+      "description": "Pufakchali saralash; ichma-ich tsikllar bitta holatlar mashinasida"
     }
   ],
   "_izoh": "techniques — manba kodda qo'llangan usullar; pseudocode_techniques — angr psevdokodida haqiqatda ko'rinib turgan usullar (angr ba'zi konstantalarni o'zi yig'gan va s5 dagi soxta shartni xato soddalashtirgan, shuning uchun ular psevdokodda yo'q)."

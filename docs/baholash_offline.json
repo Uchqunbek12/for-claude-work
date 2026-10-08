@@ -9,27 +9,21 @@
     "missed": [],
     "before": {
       "lines": 10,
-      "cyclomatic": 1,
-      "operators": 12,
-      "constants": 0
+      "cyclomatic": 1
     },
     "after": {
       "lines": 10,
-      "cyclomatic": 1,
-      "operators": 5,
-      "constants": 0
+      "cyclomatic": 1
     },
     "clean": {
       "lines": 4,
-      "cyclomatic": 1,
-      "operators": 5,
-      "constants": 0
+      "cyclomatic": 1
     },
     "attempts": 1,
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.25,
+    "time": 0.4,
     "error": "",
     "suggested_name": "mix"
   },
@@ -38,32 +32,26 @@
     "engine": "offline",
     "verification": "verified",
     "truth": "mismatch",
-    "truth_details": "846/5000 testda farq:",
+    "truth_details": "826/5000 testda farq:",
     "recall": 1.0,
     "missed": [],
     "before": {
       "lines": 17,
-      "cyclomatic": 7,
-      "operators": 13,
-      "constants": 1
+      "cyclomatic": 7
     },
     "after": {
       "lines": 10,
-      "cyclomatic": 5,
-      "operators": 4,
-      "constants": 0
+      "cyclomatic": 5
     },
     "clean": {
       "lines": 6,
-      "cyclomatic": 3,
-      "operators": 0,
-      "constants": 0
+      "cyclomatic": 3
     },
     "attempts": 1,
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.21,
+    "time": 0.34,
     "error": "",
     "suggested_name": "clamp"
   },
@@ -77,27 +65,21 @@
     "missed": [],
     "before": {
       "lines": 28,
-      "cyclomatic": 7,
-      "operators": 1,
-      "constants": 10
+      "cyclomatic": 7
     },
     "after": {
       "lines": 12,
-      "cyclomatic": 2,
-      "operators": 1,
-      "constants": 0
+      "cyclomatic": 2
     },
     "clean": {
       "lines": 6,
-      "cyclomatic": 2,
-      "operators": 1,
-      "constants": 0
+      "cyclomatic": 2
     },
     "attempts": 1,
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.12,
+    "time": 0.23,
     "error": "",
     "suggested_name": "gcd"
   },
@@ -111,27 +93,21 @@
     "missed": [],
     "before": {
       "lines": 9,
-      "cyclomatic": 2,
-      "operators": 18,
-      "constants": 1
+      "cyclomatic": 2
     },
     "after": {
       "lines": 10,
-      "cyclomatic": 2,
-      "operators": 18,
-      "constants": 1
+      "cyclomatic": 2
     },
     "clean": {
       "lines": 4,
-      "cyclomatic": 1,
-      "operators": 2,
-      "constants": 0
+      "cyclomatic": 1
     },
     "attempts": 1,
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.14,
+    "time": 0.22,
     "error": "",
     "suggested_name": "greet_char"
   },
@@ -145,28 +121,106 @@
     "missed": [],
     "before": {
       "lines": 42,
-      "cyclomatic": 9,
-      "operators": 16,
-      "constants": 3
+      "cyclomatic": 9
     },
     "after": {
       "lines": 18,
-      "cyclomatic": 2,
-      "operators": 8,
-      "constants": 2
+      "cyclomatic": 2
     },
     "clean": {
       "lines": 8,
-      "cyclomatic": 2,
-      "operators": 6,
-      "constants": 2
+      "cyclomatic": 2
     },
     "attempts": 1,
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.19,
+    "time": 0.4,
     "error": "",
     "suggested_name": "checksum"
+  },
+  {
+    "id": "s6_buffer",
+    "engine": "offline",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 31,
+      "cyclomatic": 8
+    },
+    "after": {
+      "lines": 10,
+      "cyclomatic": 2
+    },
+    "clean": {
+      "lines": 5,
+      "cyclomatic": 2
+    },
+    "attempts": 1,
+    "cost": 0.0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "time": 0.39,
+    "error": "",
+    "suggested_name": "xor_stream"
+  },
+  {
+    "id": "s7_calls",
+    "engine": "offline",
+    "verification": "verified",
+    "truth": "mismatch",
+    "truth_details": "1609/5000 testda farq:",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 29,
+      "cyclomatic": 8
+    },
+    "after": {
+      "lines": 11,
+      "cyclomatic": 2
+    },
+    "clean": {
+      "lines": 9,
+      "cyclomatic": 2
+    },
+    "attempts": 1,
+    "cost": 0.0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "time": 0.31,
+    "error": "",
+    "suggested_name": "rot_hash"
+  },
+  {
+    "id": "s8_sort",
+    "engine": "offline",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 50,
+      "cyclomatic": 16
+    },
+    "after": {
+      "lines": 19,
+      "cyclomatic": 5
+    },
+    "clean": {
+      "lines": 10,
+      "cyclomatic": 5
+    },
+    "attempts": 1,
+    "cost": 0.0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "time": 1.42,
+    "error": "",
+    "suggested_name": "bubble_sort"
   }
 ]

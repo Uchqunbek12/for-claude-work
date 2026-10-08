@@ -24,11 +24,11 @@ from . import compiler, harness, parser
 from .models import FunctionInfo, ParsedInput
 
 STATUS_UZ = {
-    "verified": "✅ Tasdiqlandi: kompilyatsiya bo'ldi va asl kod bilan ekvivalent",
-    "compiled": "🟡 Kompilyatsiya bo'ldi, xatti-harakat avtomatik solishtirilmadi",
-    "mismatch": "❌ Asl koddan farq qiladi",
-    "compile_error": "❌ Kompilyatsiya xatosi",
-    "no_compiler": "⚪ Tekshirilmadi (C kompilyatori yo'q)",
+    "verified": "Tasdiqlandi: kompilyatsiya bo'ldi va asl kod bilan bir xil ishlaydi",
+    "compiled": "Kompilyatsiya bo'ldi, lekin natijalar avtomatik solishtirilmadi",
+    "mismatch": "Farq bor: asl kod boshqa natija beradi",
+    "compile_error": "Kompilyatsiya xatosi",
+    "no_compiler": "Tekshirilmadi: gcc topilmadi",
 }
 STATUS_RANK = {"verified": 4, "compiled": 3, "no_compiler": 2, "mismatch": 1, "compile_error": 0}
 
@@ -55,12 +55,34 @@ class VerifyReport:
         return d
 
 
+def original_unit(parsed: ParsedInput, func: FunctionInfo) -> str:
+    """Asl psevdokoddan faqat kerakli qism: e'lonlar + funksiyaning o'zi + u (bilvosita) chaqiradigan funksiyalar.
+
+    IDA'dan butun dastur eksport qilinganda unda kompilyatsiya bo'lmaydigan "xizmat" funksiyalari
+    (start, init_proc, ...) bo'ladi. Ular tahlil qilinayotgan funksiyaga aloqasi yo'q, lekin butun
+    faylni buzadi — shuning uchun ularni olib tashlaymiz.
+    """
+    by_name = {f.name: f for f in parsed.functions}
+    needed, stack = [], [func.name]
+    while stack:
+        name = stack.pop()
+        if name in needed or name not in by_name:
+            continue
+        needed.append(name)
+        stack.extend(by_name[name].calls)
+    parts = [parsed.preamble] + [f.text for f in parsed.functions if f.name in needed]
+    return "\n\n".join(p for p in parts if p)
+
+
 def verify(parsed: ParsedInput, func: FunctionInfo, c_code: str, n_tests: int = 2000) -> VerifyReport:
     if compiler.find_compiler() is None:
         return VerifyReport("no_compiler", details="gcc yoki clang topilmadi — natija tekshirilmadi")
 
+    # IDA/Ghidra global nomlari (dword_404010, DAT_...) e'lon qilinmagan bo'lsa, ularni avtomatik e'lon qilamiz —
+    # differensial testda ham aynan shunday qilinadi.
+    declared = harness.declare_globals(c_code, harness.find_globals(c_code, set(parsed.data_blobs)))
     with tempfile.TemporaryDirectory(prefix="deobf_verify_") as tmp:
-        syn = compiler.syntax_check(c_code, Path(tmp))
+        syn = compiler.syntax_check(declared, Path(tmp))
     if not syn.ok:
         return VerifyReport("compile_error", details=syn.errors,
                             problems="gcc compilation errors:\n" + syn.errors)
@@ -76,17 +98,19 @@ def verify(parsed: ParsedInput, func: FunctionInfo, c_code: str, n_tests: int = 
                             problems=f"The parameter list changed ({len(func.params)} -> {len(cand.params)} params). "
                                      f"Keep exactly: ({', '.join(f'{p.type} {p.name}' for p in func.params)}).")
 
-    support = harness.data_support_code(parsed.data_blobs, parsed.raw + "\n" + c_code)
-    diff = harness.differential_test(parsed.raw, func.name, c_code, func.name,
-                                     func.ret_type, func.param_types, n_tests=n_tests, support_code=support)
+    intptr = harness.pointer_like_params(func.text, [(p.type, p.name) for p in func.params])
+    diff = harness.differential_test(original_unit(parsed, func), func.name, c_code, func.name,
+                                     func.ret_type, func.param_types,
+                                     n_tests=n_tests, data_blobs=parsed.data_blobs, intptr=intptr)
     if diff.status == "equivalent":
         return VerifyReport("verified", details=diff.details, tests=diff.tests)
     if diff.status == "mismatch":
         return VerifyReport("mismatch", details=diff.details, tests=diff.tests, mismatches=diff.mismatches,
                             problems="Differential testing against the original pseudocode found different results "
-                                     "(args are the function parameters in order; values in hex):\n" + diff.details)
+                                     "(reason in parentheses; args are the function parameters in order, values in hex, "
+                                     "bufN = a pointer to a test buffer):\n" + diff.details)
     # skipped / inconclusive: kod kompilyatsiya bo'ldi, lekin solishtirib bo'lmadi
-    if diff.status == "inconclusive" and "Yangi kod kompilyatsiya" in diff.details:
+    if diff.failed == "candidate":
         return VerifyReport("compile_error", details=diff.details,
                             problems="The code passes syntax check but fails to compile as an object file:\n"
                                      + diff.details)

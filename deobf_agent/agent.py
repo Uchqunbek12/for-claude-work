@@ -21,7 +21,6 @@ from .detectors import AnalysisResult
 from .llm import ClaudeSession, DiskCache, LLMError, UsageStats, resolve_model
 from .models import FunctionInfo, ParsedInput
 from .schema import DeobfResult
-from .verifier import STATUS_RANK, VerifyReport
 
 
 @dataclass
@@ -34,6 +33,7 @@ class AgentConfig:
     n_tests: int = 2000               # differensial testlar soni
     max_tokens: int = 16000
     cache_dir: str | None = ".deobf_cache"   # None -> disk kesh o'chirilgan
+    api_key: str | None = None        # tashrif buyuruvchining o'z kaliti (public rejim)
     client: object = None             # testlar uchun soxta mijoz
 
 
@@ -51,7 +51,7 @@ class FunctionReport:
     engine: str                       # "offline" yoki model nomi
     analysis: AnalysisResult
     result: DeobfResult
-    verification: VerifyReport
+    verification: verifier.VerifyReport
     attempts: list[Attempt] = field(default_factory=list)
     usage: UsageStats = field(default_factory=UsageStats)
     metrics_before: metrics.Metrics | None = None
@@ -68,7 +68,7 @@ def _noop(_: str) -> None:
 
 
 def _run_offline(parsed: ParsedInput, func: FunctionInfo, analysis: AnalysisResult, cfg: AgentConfig,
-                 progress: ProgressFn) -> tuple[DeobfResult, VerifyReport, list[Attempt]]:
+                 progress: ProgressFn) -> tuple[DeobfResult, verifier.VerifyReport, list[Attempt]]:
     attempts = []
     result, rep = None, None
     # Avval eng kuchli soddalashtirish, testdan o'tmasa — ehtiyotkorroq darajalar
@@ -83,24 +83,23 @@ def _run_offline(parsed: ParsedInput, func: FunctionInfo, analysis: AnalysisResu
 
 
 def deobfuscate_function(parsed: ParsedInput, func: FunctionInfo, cfg: AgentConfig,
-                         progress: ProgressFn = _noop) -> FunctionReport:
+                         progress: ProgressFn = _noop, callee_notes: dict[str, str] | None = None) -> FunctionReport:
     t0 = time.time()
     progress(f"[{func.name}] Statik tahlil...")
     analysis = detectors.analyze(func, parsed.data_blobs)
     progress(f"[{func.name}] {len(analysis.findings)} ta belgi topildi: {', '.join(analysis.techniques()) or 'yo`q'}")
 
-    if cfg.offline:
-        result, rep, attempts = _run_offline(parsed, func, analysis, cfg, progress)
-        report = FunctionReport(func, parsed.style, "offline", analysis, result, rep, attempts)
-    else:
+    attempts: list[Attempt] = []
+    best: tuple[DeobfResult, verifier.VerifyReport] | None = None
+    engine, error, usage = "offline", "", UsageStats()
+    if not cfg.offline:
         model = resolve_model(cfg.model)
-        session = ClaudeSession(model=model, effort=cfg.effort, max_tokens=cfg.max_tokens,
+        session = ClaudeSession(model=model, effort=cfg.effort, max_tokens=cfg.max_tokens, api_key=cfg.api_key,
                                 cache=DiskCache(cfg.cache_dir) if cfg.cache_dir else None, client=cfg.client)
-        attempts: list[Attempt] = []
-        best: tuple[DeobfResult, VerifyReport] | None = None
-        error = ""
+        usage = session.usage
         try:
-            message = prompts.build_user_message(func, parsed.style, analysis, parsed.data_blobs, cfg.language)
+            message = prompts.build_user_message(func, parsed.style, analysis, parsed.data_blobs, cfg.language,
+                                                 callee_notes)
             for rnd in range(1, cfg.max_rounds + 1):
                 progress(f"[{func.name}] Claude ({model}) so'rovi, {rnd}-urinish...")
                 result = session.ask(message)
@@ -108,34 +107,51 @@ def deobfuscate_function(parsed: ParsedInput, func: FunctionInfo, cfg: AgentConf
                 rep = verifier.verify(parsed, func, result.c_code, cfg.n_tests)
                 attempts.append(Attempt(rnd, rep.status, rep.details))
                 progress(f"[{func.name}] Natija: {rep.label_uz}")
-                if best is None or STATUS_RANK[rep.status] > STATUS_RANK[best[1].status]:
-                    best = (result, rep)
+                if best is None or verifier.STATUS_RANK[rep.status] > verifier.STATUS_RANK[best[1].status]:
+                    best, engine = (result, rep), model
                 if rep.ok:
                     break
                 message = prompts.build_fix_message(rep.problems, cfg.language)
         except LLMError as exc:
             error = str(exc)
-            progress(f"[{func.name}] LLM xatosi: {error}")
-        if best is None:
-            progress(f"[{func.name}] Offline natijaga o'tilmoqda...")
-            result, rep, off_attempts = _run_offline(parsed, func, analysis, cfg, progress)
-            attempts += off_attempts
-            best = (result, rep)
-            engine = "offline"
-        else:
-            engine = model
-        report = FunctionReport(func, parsed.style, engine, analysis, best[0], best[1], attempts,
-                                usage=session.usage, error=error)
+            progress(f"[{func.name}] LLM xatosi: {error} — offline natijaga o'tilmoqda...")
+    if best is None:
+        result, rep, extra = _run_offline(parsed, func, analysis, cfg, progress)
+        attempts += extra
+        best = (result, rep)
 
-    report.metrics_before = metrics.measure(func.text)
-    report.metrics_after = metrics.measure(report.result.c_code)
-    report.elapsed_sec = round(time.time() - t0, 2)
-    return report
+    return FunctionReport(func, parsed.style, engine, analysis, best[0], best[1], attempts, usage=usage,
+                          metrics_before=metrics.measure(func.text), metrics_after=metrics.measure(best[0].c_code),
+                          error=error, elapsed_sec=round(time.time() - t0, 2))
+
+
+def _callee_first(funcs: list[FunctionInfo]) -> list[FunctionInfo]:
+    """Funksiyalarni "avval chaqiriladiganlar" tartibida qaytaradi (pastdan yuqoriga tahlil uchun)."""
+    by_name = {f.name: f for f in funcs}
+    order: list[FunctionInfo] = []
+    seen: set[str] = set()
+
+    def visit(f: FunctionInfo) -> None:
+        if f.name in seen:
+            return
+        seen.add(f.name)
+        for callee in f.calls:
+            if callee in by_name:
+                visit(by_name[callee])
+        order.append(f)
+
+    for f in funcs:
+        visit(f)
+    return order
 
 
 def deobfuscate_text(text: str, cfg: AgentConfig, function: str | None = None,
                      progress: ProgressFn = _noop) -> tuple[ParsedInput, list[FunctionReport]]:
-    """Matndagi barcha (yoki tanlangan) funksiyalarni deobfuskatsiya qiladi."""
+    """Matndagi barcha (yoki tanlangan) funksiyalarni deobfuskatsiya qiladi.
+
+    Bir nechta funksiya bo'lsa, avval chaqiriladigan (yordamchi) funksiyalar tahlil qilinadi va
+    ularning qisqa tavsifi chaqiruvchi funksiya uchun LLM'ga beriladi — odam ham kodni shunday o'qiydi.
+    """
     parsed = parser.parse(text)
     if not parsed.functions:
         raise ValueError("Matnda funksiya topilmadi. Psevdokodni to'liq (signatura va { } tanasi bilan) kiriting.")
@@ -147,4 +163,10 @@ def deobfuscate_text(text: str, cfg: AgentConfig, function: str | None = None,
             raise ValueError(f"`{function}` funksiyasi topilmadi. Mavjud funksiyalar: {names}")
         funcs = [f]
     progress(f"Uslub: {parsed.style}; funksiyalar: {', '.join(f.name for f in funcs)}")
-    return parsed, [deobfuscate_function(parsed, f, cfg, progress) for f in funcs]
+    notes: dict[str, str] = {}
+    reports: dict[str, FunctionReport] = {}
+    for f in _callee_first(funcs):
+        rep = deobfuscate_function(parsed, f, cfg, progress, {c: notes[c] for c in f.calls if c in notes})
+        reports[f.name] = rep
+        notes[f.name] = f"{rep.result.suggested_name}: {rep.result.summary}"
+    return parsed, [reports[f.name] for f in funcs]      # foydalanuvchiga asl tartibda

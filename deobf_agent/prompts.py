@@ -6,15 +6,12 @@ aniq amal qiladi, ingliz matni esa kamroq token egallaydi (= arzonroq). Natija
 
 SYSTEM_PROMPT o'zgarmas matn: u har so'rovda bir xil bo'lgani uchun Claude API uni
 keshlaydi (prompt caching), keyingi so'rovlarda bu qism ~10 barobar arzon hisoblanadi.
-PROMPT_VERSION — prompt o'zgarganda disk keshini eskirgan deb belgilash uchun.
 """
 
 from __future__ import annotations
 
 from .detectors import AnalysisResult
 from .models import FunctionInfo
-
-PROMPT_VERSION = "1"
 
 LANGUAGES = {
     "uz": "Uzbek (Latin script, e.g. 'funksiya', 'o'zgaruvchi', 'tsikl')",
@@ -47,7 +44,10 @@ types). You may rename parameters and locals; list every rename in `renames`.
 3. The code must compile as C11 with <stdint.h>. Decompiler types (_DWORD, __int64, undefined4, uint, \
 ...) are available, but prefer standard types (uint32_t, int32_t, ...) of the same width.
 4. Any data you need (decoded strings, tables) must be defined INSIDE c_code as `static` objects. \
-Declare prototypes for external functions that are called but not defined.
+Declare prototypes for external functions that are called but not defined, and keep calling them \
+with the same arguments in the same order (the test checks the call sequence). Global variables of \
+the original (e.g. dword_404010, DAT_00104010) must stay globals: declare them `extern`, do not \
+define them. Writes through pointer parameters are checked too - keep them.
 5. Never change behaviour to make code prettier. If a part is ambiguous, keep the original logic for \
 that part and say so in `notes`; lower `confidence` accordingly.
 6. Unsigned overflow wraps; assume the target is x86-64 (int = 32 bits, long long = 64 bits).
@@ -55,9 +55,29 @@ that part and say so in `notes`; lower `confidence` accordingly.
 Static-analysis facts are provided with the input. Facts marked VERIFIED were proven by random \
 testing (thousands of inputs) - trust them. Other hints may be wrong; double-check them.
 
-Explanations (`summary`, block `explanation`, `notes`, rename `reason`, block `title`) must be \
+Explanations (`summary`, `simple_summary`, block `explanation`, block `simple`, `notes`, rename `reason`, block `title`) must be \
 written in the language requested by the user, in simple words a beginner analyst understands. \
-Code, identifiers and C keywords stay in English. Map blocks to the numbered input lines.\
+Code, identifiers and C keywords stay in English. Map blocks to the numbered input lines.
+
+Plain-language fields: `simple_summary` and each block's `simple`. Write them for a person who has \
+never used a computer, for example a farmer in a village. They retell `summary` and the block \
+`explanation` in simpler words and never tell a different story. Rules: (1) requested language; for \
+Uzbek use Latin script with correct o', g', sh, ch and everyday village words; if a technical word \
+cannot be avoided, explain it once in brackets with a household comparison. (2) No code at all: no \
+identifiers, keywords, operators, hex numbers or line numbers. (3) Short sentences; `simple` is 2-4 \
+sentences, `simple_summary` 3-6. (4) At most one everyday analogy per block, reusing these fixed images: \
+mba - a seller who states a simple price as a long roundabout calculation; opaque_predicate - a road \
+sign "if the sun rises in the east, turn left"; control_flow_flattening - a recipe cut into numbered \
+cards and shuffled, each card says which card comes next; encoded_strings - a locked letter, the same \
+key locks and unlocks it; encoded_constants - "120 minus 70" written instead of "50"; dead_code - a \
+carrot chopped but never put in the pot; known_constants - a familiar ingredient that hints which dish \
+it is (a clue, not a trick). (5) Stay technically true: do not say something was tested unless the \
+input marks it VERIFIED, never claim the whole function passed testing (the tool reports that), and \
+say "ehtimol" (probably) when the purpose is a guess. (6) Calm, respectful tone, no emojis, no Markdown. \
+Example (Uzbek) for a block that rewrites (a ^ b) + 2*(a & b) as a + b: "Bu yerda oddiy qo'shish \
+ataylab uzun va chigal qilib yozilgan, xuddi bozorda «besh ming» o'rniga «yigirma mingning choragi, \
+ustiga uch ming, keyin uch mingni ayir» deyishgandek. Javob baribir bir xil. Biz uzun hisobni olib \
+tashlab, ikki sonni oddiygina qo'shishni qoldirdik."\
 """
 
 
@@ -67,7 +87,8 @@ def number_lines(code: str) -> str:
 
 
 def build_user_message(func: FunctionInfo, style: str, analysis: AnalysisResult,
-                       data_blobs: dict[str, bytes], language: str) -> str:
+                       data_blobs: dict[str, bytes], language: str,
+                       callee_notes: dict[str, str] | None = None) -> str:
     style_name = {"ida": "IDA Hex-Rays", "ghidra": "Ghidra", "angr": "angr", "c": "plain C"}.get(style, style)
     parts = [
         f"Decompiler: {style_name}",
@@ -75,7 +96,9 @@ def build_user_message(func: FunctionInfo, style: str, analysis: AnalysisResult,
         f"{', '.join(f'{p.type} {p.name}' for p in func.params) or 'none'})",
     ]
     if func.calls:
-        parts.append("Calls to other functions (bodies not provided): " + ", ".join(func.calls))
+        parts.append("Calls to other functions: " + ", ".join(func.calls))
+    for name, note in (callee_notes or {}).items():
+        parts.append(f"  Already analysed callee {name} -> {note}")
     used_blobs = {k: v for k, v in data_blobs.items() if k in func.text}
     if used_blobs:
         parts.append("Global data referenced by the function (hex bytes):")

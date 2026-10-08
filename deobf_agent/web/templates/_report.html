@@ -1,75 +1,59 @@
-{# Natijalar qismi: Web UI va saqlanadigan HTML hisobotda bir xil ishlatiladi. #}
-<div class="panel">
-  <div class="stats">
-    <div class="stat"><div class="k">Kirish uslubi</div><div class="v">{{ style_names.get(data.style, data.style) }}</div></div>
-    <div class="stat"><div class="k">Funksiyalar</div><div class="v">{{ data.functions|length }}</div></div>
-    <div class="stat"><div class="k">Umumiy narx</div><div class="v">${{ "%.5f"|format(data.total_cost_usd) }}</div></div>
-  </div>
+{# Natijalar qismi: Web UI va saqlanadigan HTML hisobotda bir xil ishlatiladi. Hech qayerda |safe yo'q —
+   foydalanuvchi va model matni doim ekranlanadi. #}
+{% set short = {"verified": "Tasdiqlandi", "compiled": "Kompilyatsiya bo'ldi", "mismatch": "Farq bor",
+                "compile_error": "Kompilyatsiya xatosi", "no_compiler": "Tekshirilmadi"} %}
+<p class="meta">Manba: {{ style_names.get(data.style, data.style) }} · {{ data.functions|length }} ta funksiya
+{%- if data.total_cost_usd %} · jami ${{ "%.4f"|format(data.total_cost_usd) }}{% endif %}
+{%- if rid %} · yuklab olish: <a href="{{ url_for('download', rid=rid, fmt='md') }}">.md</a>
+<a href="{{ url_for('download', rid=rid, fmt='html') }}">.html</a>
+<a href="{{ url_for('download', rid=rid, fmt='json') }}">.json</a>{% endif %}</p>
+<div class="mode" role="group" aria-label="Tushuntirish turi">
+  <button type="button" data-view="expert" aria-pressed="true">Mutaxassis uchun</button>
+  <button type="button" data-view="simple" aria-pressed="false">Oddiy tilda</button>
 </div>
 {% for f in data.functions %}
-<article class="panel">
-  <div class="fn-head">
-    <h2><code>{{ f.function }}</code> → <code>{{ f.suggested_name }}</code></h2>
-    <span class="badge status-{{ f.verification.status }}">{{ f.verification.label }}</span>
-  </div>
-  {% if f.error %}<div class="warn">⚠️ LLM xatosi: {{ f.error }} — natija offline tahlildan olindi.</div>{% endif %}
-  <div class="stats">
-    <div class="stat"><div class="k">Dvigatel</div><div class="v">{{ f.engine }}</div></div>
-    <div class="stat"><div class="k">Ishonch (model)</div><div class="v">{{ confidence_uz.get(f.result.confidence, f.result.confidence) }}</div></div>
-    <div class="stat"><div class="k">Qatorlar</div><div class="v">{{ f.metrics_before.lines }} → {{ f.metrics_after.lines }}</div></div>
-    <div class="stat"><div class="k">Tsiklomatik murakkablik</div><div class="v">{{ f.metrics_before.cyclomatic }} → {{ f.metrics_after.cyclomatic }}</div></div>
-    <div class="stat"><div class="k">Urinishlar</div><div class="v">{{ f.attempts|length }}</div></div>
-    <div class="stat"><div class="k">Narx</div><div class="v">${{ "%.5f"|format(f.usage.cost_usd) }}{% if f.usage.cache_hits %} (kesh){% endif %}</div></div>
-    <div class="stat"><div class="k">Vaqt</div><div class="v">{{ f.elapsed_sec }} s</div></div>
-  </div>
-
-  <h3>Qisqacha</h3>
-  <p>{{ f.result.summary }}</p>
-  {% if f.result.techniques %}
-  <div class="chips">{% for t in f.result.techniques %}<span class="chip">{{ tech_names.get(t, t) }}</span>{% endfor %}</div>
-  {% endif %}
-
-  <div class="code-grid">
-    <div><h3>Asl psevdokod</h3><pre><code class="language-c">{{ f.original_numbered }}</code></pre></div>
-    <div><h3>Soddalashtirilgan C kod</h3><pre><code class="language-c">{{ f.display_code }}</code></pre></div>
-  </div>
-
-  {% if f.result.blocks %}
-  <h3>Bloklar bo'yicha tushuntirish</h3>
-  {% for b in f.result.blocks %}
-  <details class="block" open>
-    <summary>{{ loop.index }}. {{ b.title }} <span class="muted">— qatorlar {{ b.original_lines }}</span></summary>
-    <div class="block-body">
-      <pre><code class="language-c">{{ b.original_code }}</code></pre>
-      {% if b.simplified_code %}<pre><code class="language-c">{{ b.simplified_code }}</code></pre>{% endif %}
-    </div>
-    <p>{{ b.explanation }}</p>
-  </details>
-  {% endfor %}
-  {% endif %}
-
-  {% if f.result.renames %}
-  <h3>Qayta nomlashlar</h3>
-  <div class="table-wrap"><table>
-    <tr><th>Eski</th><th>Yangi</th><th>Sabab</th></tr>
-    {% for r in f.result.renames %}<tr><td><code>{{ r.old }}</code></td><td><code>{{ r.new }}</code></td><td>{{ r.reason }}</td></tr>{% endfor %}
-  </table></div>
-  {% endif %}
-
-  {% if f.static_findings %}
-  <h3>Statik tahlil topilmalari (LLM'siz, bepul)</h3>
-  <ul class="findings">
-    {% for x in f.static_findings %}
-    <li><b>{{ tech_names.get(x.technique, x.technique) }}</b>, {{ x.line }}-qator{% if x.verified %} <span class="badge status-verified">isbotlangan</span>{% endif %}: {{ x.message.split("\n")[0] }}</li>
-    {% endfor %}
-  </ul>
-  {% endif %}
-  {% for sm in f.state_machines %}<h3>Flattening: holatlar xaritasi</h3><pre>{{ sm }}</pre>{% endfor %}
-
-  <h3>Tekshiruv tafsilotlari</h3>
-  <ul class="findings">
-    {% for a in f.attempts %}<li>{{ a.round }}-urinish: <span class="badge status-{{ a.status }}">{{ a.status }}</span> <span class="muted">{{ a.details.split("\n")[0] }}</span></li>{% endfor %}
-  </ul>
-  {% if f.result.notes %}<h3>Eslatmalar</h3><p>{{ f.result.notes }}</p>{% endif %}
+<article>
+<h2><code>{{ f.function }}</code>{% if f.suggested_name and f.suggested_name != f.function %} → <code>{{ f.suggested_name }}</code>{% endif %}</h2>
+<p class="status status-{{ f.verification.status }}"><b>{{ short.get(f.verification.status, f.verification.status) }}.</b>
+  <span>{{ f.verification.details.split("\n")[0] }}</span></p>
+{% if f.error %}<p class="error">Claude javob bermadi: {{ f.error }} Pastdagi natija offline tahlildan.</p>{% endif %}
+<p class="meta">{{ f.engine }} · qatorlar {{ f.metrics_before.lines }} → {{ f.metrics_after.lines }} ·
+<abbr title="if, while, case va boshqa tarmoqlanishlar soni + 1">murakkablik</abbr> {{ f.metrics_before.cyclomatic }} → {{ f.metrics_after.cyclomatic }}
+{%- if f.engine != "offline" %} · ishonch: {{ confidence_uz.get(f.result.confidence, f.result.confidence) }} · ${{ "%.4f"|format(f.usage.cost_usd) }}{% if f.usage.cache_hits %} (keshdan){% endif %}{% endif %} · {{ f.elapsed_sec }} s</p>
+<p class="expert">{{ f.result.summary }}</p>
+<p class="simple">{{ f.result.simple_summary or f.result.summary }}</p>
+{% if f.result.techniques %}<p class="muted">Topilgan usullar: {% for t in f.result.techniques %}{{ tech_names.get(t, t) }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+<div class="panes">
+  <div><h3>Asl kod</h3><div class="src"><pre class="ln" aria-hidden="true">{% for _ in f.original_code.splitlines() %}{{ loop.index }}
+{% endfor %}</pre><pre><code class="language-c">{{ f.original_code }}</code></pre></div></div>
+  <div class="after"><h3>Soddalashtirilgan</h3><pre><code class="language-c">{{ f.display_code }}</code></pre></div>
+</div>
+{% if f.result.blocks %}<h3>Tushuntirish</h3>
+<ol class="blocks">{% for b in f.result.blocks %}<li><b>{{ b.title }}</b> <span class="muted">· {{ b.original_lines }}-qator</span>
+<pre>{% if b.simplified_code %}{% for l in b.original_code.splitlines() %}<span class="del">- {{ l.strip() }}</span>
+{% endfor %}{% for l in b.simplified_code.splitlines() %}<span class="add">+ {{ l.strip() }}</span>
+{% endfor %}{% else %}{{ b.original_code }}{% endif %}</pre>
+<p class="expl expert">{{ b.explanation }}</p>
+<p class="expl simple">{{ b.simple or b.explanation }}</p></li>{% endfor %}</ol>{% endif %}
+{% if f.result.renames %}<h3>Yangi nomlar</h3><div class="wrap"><table><tr><th>Eski</th><th>Yangi</th><th>Nega</th></tr>
+{% for r in f.result.renames %}<tr><td><code>{{ r.old }}</code></td><td><code>{{ r.new }}</code></td><td>{{ r.reason }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% if f.result.notes %}<p class="muted">Eslatma: {{ f.result.notes }}</p>{% endif %}
+{% if f.static_findings %}<details><summary>Statik tahlil — {{ f.static_findings|length }} ta topilma</summary>
+<ul class="plain">{% for x in f.static_findings %}<li>{{ x.line }}-qator, {{ tech_names.get(x.technique, x.technique) }}{% if x.verified %} <span class="add">(test bilan tasdiqlangan)</span>{% endif %}: {{ x.message.split("\n")[0] }}</li>{% endfor %}</ul>
+{% for sm in f.state_machines %}<pre>{{ sm }}</pre>{% endfor %}</details>{% endif %}
+<details><summary>Tekshiruv tarixi — {{ f.attempts|length }} ta urinish</summary>
+<ul class="plain">{% for a in f.attempts %}<li>{{ a.round }}. <span class="status-{{ a.status }}">{{ short.get(a.status, a.status)|lower }}</span> — {{ a.details.split("\n")[0] }}</li>{% endfor %}</ul></details>
 </article>
 {% endfor %}
+<script>
+  /* "Mutaxassis uchun" / "Oddiy tilda" almashtirgichi: faqat ko'rinish, server so'rovi yo'q */
+  document.querySelectorAll(".mode button").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var simple = btn.dataset.view === "simple";
+      document.body.classList.toggle("view-simple", simple);
+      document.querySelectorAll(".mode button").forEach(function (b) {
+        b.setAttribute("aria-pressed", String(b.dataset.view === btn.dataset.view));
+      });
+    });
+  });
+</script>

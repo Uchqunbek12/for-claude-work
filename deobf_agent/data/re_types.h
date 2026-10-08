@@ -79,6 +79,13 @@ static inline uint32_t __ROR4__(uint32_t v, int n) { n &= 31; return (v >> n) | 
 static inline uint64_t __ROL8__(uint64_t v, int n) { n &= 63; return (v << n) | (v >> ((64 - n) & 63)); }
 static inline uint64_t __ROR8__(uint64_t v, int n) { n &= 63; return (v >> n) | (v << ((64 - n) & 63)); }
 
+/* IDA intrinsiclari: stack canary (__readfsqword(0x28)) va boshqalar. Test uchun doimiy qiymat qaytaradi —
+   shunda "canary" tekshiruvi ikkala funksiyada ham bir xil o'tadi. */
+static inline unsigned long long __readfsqword(unsigned long off) { (void)off; return 0x2F8A3B5C7D9E1F00ull; }
+static inline unsigned long long __readgsqword(unsigned long off) { (void)off; return 0x2F8A3B5C7D9E1F00ull; }
+static inline unsigned int __readfsdword(unsigned long off) { (void)off; return 0x7D9E1F00u; }
+static inline unsigned int __readgsdword(unsigned long off) { (void)off; return 0x7D9E1F00u; }
+
 /* ---------- Ghidra ---------- */
 typedef uint8_t  undefined;
 typedef uint8_t  undefined1;
@@ -89,6 +96,7 @@ typedef uint64_t undefined5;
 typedef uint64_t undefined6;
 typedef uint64_t undefined7;
 typedef uint64_t undefined8;
+typedef unsigned __int128 undefined16;
 typedef uint8_t  byte;
 typedef uint16_t word;
 typedef uint32_t dword;

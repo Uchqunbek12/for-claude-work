@@ -634,3 +634,98 @@ Ishlab chiquvchining kompyuterida (Linux) hammasi ishlagan bo'lsa ham, foydalanu
 dastur ishga tushmadi. Bu dasturiy injiniringdagi muhim saboq: **vosita haqiqiy foydalanuvchi muhitida
 sinalishi kerak**, xato xabarlari esa "nima qilish kerak"ligini aytishi lozim. Shuning uchun `deobf check`
 qo'shildi: endi muammo bo'lsa, foydalanuvchi aniq qaysi qadamda xato borligini ko'radi.
+
+---
+
+## 9-bosqich. Mukammallashtirish: murakkab kod, soddalashtirish, UI, dehqoncha tushuntirish va internetga chiqarish
+
+Bu bosqich foydalanuvchining so'roviga ko'ra bajarildi: *"endi mukammallashtir, UI'ni AI qilganga
+o'xshatma — soddalashtir, keraksiz kodlarni olib tashla, buni internetga chiqarishga yordam ber,
+murakkabroq kodlar uchun ham ishlasin, yana bir — dehqoncha — tushuntirish varianti qo'sh, tushunmaydigan
+odam ham tushunsin."* Avval mustaqil audit (workflow, 8-bosqich) o'tkazildi; quyidagilar o'sha auditning
+topilmalariga asoslandi.
+
+### 9.1. Murakkabroq kod bilan ishlash
+
+**Nima qilindi va nega:** Oldin vosita faqat butun sonli parametrlarga ega funksiyalarni to'liq sinay olardi.
+Haqiqiy kodda esa ko'rsatkichlar (bufer), bir nechta funksiya, tashqi chaqiruvlar va global o'zgaruvchilar
+bo'ladi. Differensial test (`harness.py`) quyidagilar bilan kengaytirildi:
+
+- **Ko'rsatkich/bufer parametrlari:** har bir ko'rsatkichga 4096 baytli bufer ajratiladi; asl va yangi
+  funksiyaga bir xil to'ldirilgan buferlar beriladi, chaqiruvdan keyin buferlar bayt-ma-bayt solishtiriladi.
+- **"intptr" parametrlari:** butun son ko'rinishida kelib, aslida ko'rsatkich sifatida ishlatiladigan
+  argumentlar aniqlanadi.
+- **Tashqi funksiyalar:** aniqlanmagan funksiyalar uchun avtomatik "stub" (o'rnini bosuvchi) yaratiladi —
+  u argumentlarga qarab aniq, lekin takrorlanadigan qiymat qaytaradi va chaqiruvlar ketma-ketligini xeshlaydi,
+  shunda ikkala funksiya tashqi dunyo bilan bir xil "muloqot" qilgani tekshiriladi.
+- **Global o'zgaruvchilar:** IDA/Ghidra bergan nomlar (`dword_404010` va h.k.) hamda kirishning o'zida
+  ta'riflangan globallar yordamchi modulga chiqariladi, har chaqiruvdan oldin boshlang'ich holatiga
+  qaytariladi va keyin xeshlanadi — holat "oqib" ketmaydi.
+- **Bir nechta funksiya:** yordamchi funksiyalar avval (pastdan yuqoriga) tahlil qilinadi va ularning qisqa
+  tavsifi chaqiruvchi funksiya uchun Claude'ga beriladi — odam ham kodni shunday o'qiydi.
+
+**Yangi namunalar:** s6_buffer (XOR-oqim, void + bufer), s7_calls (ikki funksiya: rotl32 + rot_hash),
+s8_sort (joyida saralash, ichma-ich tsikllar, flattening bilan). Jami **8 namuna**.
+
+**Topilgan va tuzatilgan ikki nozik xato (differensial testning o'zida):**
+1. `sizeof(MESSAGE)` buzilishi: faqat o'qiladigan (`const`, boshlang'ich qiymatli) global jadval/satr
+   `extern` qilinganda to'liqsiz tur bo'lib qolardi. Yechim: bunday globallar chiqarilmaydi — har bir modul
+   o'z (static) nusxasini saqlaydi (o'zgarmas holat baribir "oqib" ketmaydi).
+2. Bufer tashqarisiga yozish: chalkashtirish dispetcheri sonlari (masalan `0x999`) uzunlik sifatida
+   ishlatilib, sort bufer chegarasidan oshib ketardi. Yechim: bufer bo'lsa, butun son argumentlari buferga
+   sig'adigan chegarada (`BUF/8`) ushlanadi.
+
+**Natija (offline, 8 namuna):** psevdokodga ekvivalentligi **8/8** isbotlandi, asl toza kodga ekvivalent
+**6/8** (qolgan 2 tasida angr dekompilyatorining o'zi shartni xato soddalashtirgan — bu hisobotda ochiq
+aytiladi). Tsiklomatik murakkablik **58 → 21** (−64%), qatorlar **216 → 100** (−54%).
+
+### 9.2. Kodni soddalashtirish va keraksiz qismlarni olib tashlash
+
+**Nima qilindi:** AI auditi "keraksiz kod" topilmalari bo'yicha katta tozalash o'tkazildi.
+`models.py` dan ishlatilmaydigan `signature`/`body`/`line_count` maydonlari, `llm.py` dan `PROMPT_VERSION`
+va `merge()`, `metrics.py` dan operator/konstanta sanash, hisobotdagi takroriy yordamchilar olib tashlandi.
+Takrorlanuvchi mantiq umumiy joyga ko'chirildi: C ifodalari kalkulyatori `expr.py` ga, HTML shablonlari
+uchun umumiy o'zgaruvchilar `report.TEMPLATE_GLOBALS` ga, hisobot formatlari `web/app.py` dagi bitta
+`FORMATS` lug'atiga. Agent ikki yo'l (Claude / offline) o'rniga bitta tushunarli yo'l bilan ishlaydigan
+qilib soddalashtirildi. **Natija: dastur kodi ancha qisqardi va o'qilishi osonlashdi.**
+
+### 9.3. UI'ni qayta dizayn qilish (sodda, qo'lda yasalgandek)
+
+**Nega:** foydalanuvchi "UI AI qilganga o'xshamasin, sodda bo'lsin" dedi. AI yasagan sahifalarga xos
+ortiqcha bezaklar (emoji, gradient, katta soyalar, ko'p rang) olib tashlandi. Yangi UI — tipografiyaga
+asoslangan, bitta asosiy rang, aniq chiziqlar; qorong'i rejim ham qo'llab-quvvatlanadi. Shablonlarda
+**hech qayerda `|safe` ishlatilmaydi** — model va foydalanuvchi matni doim ekranlanadi (XSS himoyasi).
+Fayldan yuklash to'g'ridan-to'g'ri matn maydoniga tushadi, "Boshqa model" maydoni va "Kalitni tekshirish"
+tugmasi saqlab qolindi.
+
+### 9.4. "Dehqoncha" tushuntirish rejimi
+
+**Nega:** himoyada dasturlashni bilmaydigan odam ham bo'ladi. Shuning uchun har bir izohning ikkinchi —
+atamasiz, hayotiy o'xshatishli — varianti qo'shildi. Butun funksiya uchun `simple_summary`, har bir blok
+uchun `simple` maydonlari sxemaga kiritildi (`schema.py`); ularni offline ham, Claude ham to'ldiradi.
+Offline matnlari `explain.py` da turg'un saqlanadi (bozor, oshxona/retsept, dala, xat/qulf obrazlari);
+Claude esa xuddi shu uslubda, lekin funksiyaga moslab yozadi. Web UI'da bir tugma bilan
+**"Mutaxassis uchun ↔ Oddiy tilda"** almashtiriladi (server so'rovisiz). To'liq tavsif:
+`docs/05_dehqoncha_tushuntirish.md`.
+
+### 9.5. Internetga xavfsiz chiqarish (public rejim)
+
+**Eng nozik joy:** vosita begona odam bergan kodni kompilyatsiya qilib ishga tushiradi. Shuning uchun
+`DEOBF_PUBLIC=1` bilan yoqiladigan **public rejim** qo'shildi:
+
+- **Kalit saqlanmaydi:** Claude kerak bo'lsa, tashrif buyuruvchi o'z kalitini kiritadi (BYOK); u faqat
+  o'sha bitta so'rov uchun ishlatiladi, hech qayerda yozilmaydi. Standart dvigatel — bepul offline.
+- **Cheklangan muhit** (`sandbox.py`): gcc va test dasturi tozalangan muhitda (kalitsiz), protsessor vaqti,
+  xotira, fayl hajmi, jarayon/fayl soni chegaralari bilan ishlaydi; vaqt tugasa butun jarayonlar guruhi
+  to'xtatiladi.
+- **Qattiq cheklovlar:** kirish ≤ 20 000 belgi, IP bo'yicha tezlik cheklovi (10 daqiqada 15 so'rov),
+  disk kesh o'chirilgan, `#include` taqiqlangan, xavfsizlik sarlavhalari (CSP, X-Frame-Options va h.k.).
+- **Konteyner:** `Dockerfile` (root bo'lmagan foydalanuvchi, gcc o'rnatilgan), `render.yaml` (bepul xosting
+  uchun), `wsgi.py` (gunicorn kirish nuqtasi). To'liq yo'riqnoma: `docs/04_internetga_chiqarish.md`.
+
+O'z kompyuteringizda sinash: `deobf web --public`.
+
+### 9.6. Testlar
+Yangi testlar qo'shildi: ko'rsatkich/bufer ekvivalentligi, s7 ikki funksiyali tahlil, public rejim
+(xavfsizlik sarlavhalari, BYOK talabi, `#include` va uzun kirishni rad etish). Butun to'plam qayta
+ishga tushirildi.

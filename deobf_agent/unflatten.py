@@ -27,8 +27,7 @@ from __future__ import annotations
 import re
 
 from . import expr as E
-from .detectors import negate, to_c
-from .parser import _mask_comments_and_strings
+from .parser import find_close, mask_code
 
 
 class _Bail(Exception):
@@ -36,25 +35,58 @@ class _Bail(Exception):
 
 
 def _match_brace(m: str, i: int) -> int:
-    depth = 0
-    for j in range(i, len(m)):
-        if m[j] == "{":
+    j = find_close(m, i)
+    if j < 0:
+        raise _Bail("yopuvchi qavs topilmadi")
+    return j
+
+
+def _strip_parens(t: str) -> str:
+    t = t.strip()
+    while t.startswith("(") and t.endswith(")"):
+        depth = 0
+        for i, ch in enumerate(t):
+            depth += ch == "("
+            depth -= ch == ")"
+            if depth == 0 and i < len(t) - 1:
+                return t                     # "(a) + (b)" — tashqi qavslar bir juft emas
+        t = t[1:-1].strip()
+    return t
+
+
+def _split_ternary(rhs: str) -> tuple[str, str, str]:
+    """'(shart ? A : B)' -> ('shart', 'A', 'B'). Shart matn sifatida olinadi — uni hisoblash shart emas,
+    shuning uchun a0[v1], *(p + 4) kabi murakkab ifodalar ham ishlaydi."""
+    t = _strip_parens(rhs)
+    depth, q = 0, -1
+    for i, ch in enumerate(t):
+        if ch in "([":
             depth += 1
-        elif m[j] == "}":
+        elif ch in ")]":
             depth -= 1
-            if depth == 0:
-                return j
-    raise _Bail("yopuvchi qavs topilmadi")
+        elif ch == "?" and depth == 0 and q < 0:
+            q = i
+        elif ch == ":" and depth == 0 and q >= 0:
+            return _strip_parens(t[:q]), t[q + 1:i].strip(), t[i + 1:].strip()
+    raise _Bail("ternar ifoda emas")
 
 
-def _const(text: str) -> int | None:
-    try:
-        node = E.parse(text)
-        if not E.variables(node):
-            return E.evaluate(node, {})[0] & 0xFFFFFFFF
-    except E.ExprError:
-        pass
-    return None
+_INVERSE = {"==": "!=", "!=": "==", "<": ">=", ">=": "<", ">": "<=", "<=": ">"}
+
+
+def _negate_text(cond: str) -> str:
+    """Shart inkori: 'a < b' -> 'a >= b', '!x' -> 'x', murakkab holatda '!(...)'."""
+    c = cond.strip()
+    if c.startswith("!") and not c.startswith("!=") and re.fullmatch(r"!\s*[\w\[\]]+", c):
+        return c[1:].strip()
+    ops = [m for m in re.finditer(r"==|!=|<=|>=|<(?!<)|>(?!>)", c)
+           if c[:m.start()].count("(") == c[:m.start()].count(")")]
+    if len(ops) == 1 and "&&" not in c and "||" not in c and "?" not in c:
+        m = ops[0]
+        prev = c[m.start() - 1] if m.start() else ""
+        if prev not in "<>":
+            return c[:m.start()].rstrip() + " " + _INVERSE[m.group()] + " " + c[m.end():].lstrip()
+    return f"!({c})"
 
 
 class _Case:
@@ -74,7 +106,7 @@ def _parse_cases(text: str, masked: str, var: str, start: int, end: int) -> dict
         seg_m, seg_t = block_m[lab.end():seg_end], block_t[lab.end():seg_end]
         if lab.group(1) is None:
             continue                                   # default: odatda tuzoq, e'tiborsiz qoldiramiz
-        state = _const(lab.group(1))
+        state = E.const_of(lab.group(1))
         if state is None:
             raise _Bail("case qiymati konstanta emas")
         assigns = list(re.finditer(rf"(?<![\w.>])\b{var}\s*=(?!=)\s*([^;]+);", seg_m))
@@ -96,14 +128,14 @@ def _parse_cases(text: str, masked: str, var: str, start: int, end: int) -> dict
         if assigns:
             a = assigns[0]
             rhs = a.group(1).strip()
-            c = _const(rhs)
+            c = E.const_of(rhs)
             if c is not None:
                 succ = [(None, c)]
             else:
-                node = E.parse(rhs)
-                if node[0] != "cond" or E.variables(node[2]) or E.variables(node[3]):
+                cond, yes, no = _split_ternary(rhs)
+                if E.const_of(yes) is None or E.const_of(no) is None:
                     raise _Bail("holat o'tishi ternar konstanta emas")
-                succ = [(to_c(node[1]), _const(to_c(node[2]))), (negate(node[1]), _const(to_c(node[3])))]
+                succ = [(cond, E.const_of(yes)), (_negate_text(cond), E.const_of(no))]
             if seg_m[a.end():].strip() not in ("break;", ""):
                 raise _Bail("state o'zgarishidan keyin yana kod bor")
             body_t, body_m = seg_t[:a.start()], seg_m[:a.start()]
@@ -184,12 +216,15 @@ def _structure(cases: dict[int, _Case], state: int | None, stop: set[int], depth
                 break
         then = _structure(cases, a, stop | ({merge} if merge is not None else set()), depth + 1)
         other = _structure(cases, b, stop | ({merge} if merge is not None else set()), depth + 1)
-        out.append(f"if ({cond_t}) {{")
-        out += ["    " + ln for ln in then]
-        if other:
-            out.append("} else {")
-            out += ["    " + ln for ln in other]
-        out.append("}")
+        if not then and other:                     # bo'sh "then" bo'lsa — shartni teskari qilamiz
+            then, other, cond_t = other, [], cond_f
+        if then:
+            out.append(f"if ({cond_t}) {{")
+            out += ["    " + ln for ln in then]
+            if other:
+                out.append("} else {")
+                out += ["    " + ln for ln in other]
+            out.append("}")
         state = merge
     return out
 
@@ -209,7 +244,7 @@ def _chain_order(cases: dict[int, _Case], start: int | None, stop: set[int]) -> 
 
 def unflatten(func_text: str) -> str | None:
     """Funksiya matnidagi flattening'ni yechadi. Yecha olmasa — None."""
-    masked = _mask_comments_and_strings(func_text)
+    masked = mask_code(func_text)
     sw = re.search(r"\bswitch\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\{", masked)
     if not sw:
         return None
@@ -227,10 +262,10 @@ def unflatten(func_text: str) -> str | None:
         if masked[loop_open + 1:sw.start()].strip() or masked[sw_close + 1:loop_close].strip():
             raise _Bail("tsikl ichida switch'dan boshqa kod bor")
         cases = _parse_cases(func_text, masked, var, sw_open + 1, sw_close)
-        inits = list(re.finditer(rf"\b{var}\s*=\s*([^;]+);", masked[:loop.start()]))
-        if not inits or _const(inits[-1].group(1)) is None:
+        inits = list(re.finditer(rf"\b{var}\s*=\s*([^;,]+)(?=[;,])", masked[:loop.start()]))
+        if not inits or E.const_of(inits[-1].group(1)) is None:
             raise _Bail("boshlang'ich holat topilmadi")
-        initial = _const(inits[-1].group(1))
+        initial = E.const_of(inits[-1].group(1))
         lines = _structure(cases, initial, set())
     except (_Bail, E.ExprError):
         return None
@@ -242,8 +277,9 @@ def unflatten(func_text: str) -> str | None:
     # Agar u e'lon ichida bo'lsa ("unsigned int state = X;"), faqat qiymatni olib tashlaymiz —
     # e'lonning o'zini keyinroq "ishlatilmagan o'zgaruvchi" sifatida tozalash bosqichi olib tashlaydi.
     stmt_start = max(masked.rfind(ch, 0, init.start()) for ch in ";{}") + 1
-    if masked[stmt_start:init.start()].strip():
-        text = text[:init.start()] + var + ";" + text[init.end():]
+    after = init.end()
+    if not masked[stmt_start:init.start()].strip() and masked[after] == ";":
+        text = text[:init.start()] + text[after + 1:]              # "state = X;" — butun gap
     else:
-        text = text[:init.start()] + text[init.end():]
+        text = text[:init.start()] + var + text[after:]            # e'lon ichida: faqat "= X" olib tashlanadi
     return text

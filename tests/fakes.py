@@ -73,7 +73,7 @@ class FakeClient:
 
 
 def make_result(c_code: str, name: str = "f", **kw) -> DeobfResult:
-    base = dict(function_name=name, suggested_name=name, summary="test", techniques=["mba"],
-                c_code=c_code, blocks=[], renames=[], confidence="high", notes="")
+    base = dict(function_name=name, suggested_name=name, summary="test", simple_summary="oddiy tilda test",
+                techniques=["mba"], c_code=c_code, blocks=[], renames=[], confidence="high", notes="")
     base.update(kw)
     return DeobfResult(**base)

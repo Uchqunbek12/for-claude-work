@@ -10,6 +10,7 @@ Izohlar va satr literallari ichidagi qavslar hisobga olinmaydi.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from .models import FunctionInfo, Param, ParsedInput
 
@@ -44,7 +45,8 @@ def detect_style(text: str) -> str:
     return best if scores[best] > 0 else "c"
 
 
-def _mask_comments_and_strings(text: str) -> str:
+@lru_cache(maxsize=64)
+def mask_code(text: str) -> str:
     """Izohlar va satrlarni bo'sh joy bilan almashtiradi (uzunlik va qatorlar saqlanadi).
 
     Bu qavslarni sanashda izoh yoki satr ichidagi '{' '}' belgilar xalaqit bermasligi uchun.
@@ -79,12 +81,26 @@ def _mask_comments_and_strings(text: str) -> str:
     return "".join(out)
 
 
-def _split_top_level(s: str, sep: str = ",") -> list[str]:
+def find_close(text: str, start: int, pair: str = "{}") -> int:
+    """text[start] ochuvchi qavs bo'lsa, unga mos yopuvchi qavs indeksini qaytaradi (topilmasa -1)."""
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == pair[0]:
+            depth += 1
+        elif text[i] == pair[1]:
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def split_top_level(s: str, sep: str = ",") -> list[str]:
+    """Qavslardan tashqaridagi `sep` bo'yicha bo'ladi: 'a, f(b, c)' -> ['a', 'f(b, c)']."""
     parts, depth, cur = [], 0, []
     for ch in s:
-        if ch in "([":
+        if ch in "([{":
             depth += 1
-        elif ch in ")]":
+        elif ch in ")]}":
             depth -= 1
         if ch == sep and depth == 0:
             parts.append("".join(cur))
@@ -109,7 +125,7 @@ def parse_params(param_str: str) -> list[Param]:
     if param_str.strip() in ("", "void"):
         return []
     params = []
-    for i, p in enumerate(_split_top_level(param_str)):
+    for i, p in enumerate(split_top_level(param_str)):
         if p == "...":
             params.append(Param("...", "..."))
             continue
@@ -185,8 +201,9 @@ def parse_data_blobs(text: str) -> dict[str, bytes]:
 def parse(text: str) -> ParsedInput:
     """Asosiy funksiya: psevdokod matnini tahlil qiladi."""
     text = text.replace("\r\n", "\n")
-    masked = _mask_comments_and_strings(text)
+    masked = mask_code(text)
     functions: list[FunctionInfo] = []
+    skipped: list[tuple[int, int]] = []   # funksiyaga o'xshagan, lekin tanilmagan bloklar (preambulaga kirmaydi)
     i, n = 0, len(masked)
     last_boundary = 0     # oxirgi ';' yoki '}' (yuqori darajadagi) dan keyingi pozitsiya
     while i < n:
@@ -194,21 +211,15 @@ def parse(text: str) -> ParsedInput:
         if ch == ";":
             last_boundary = i + 1
         elif ch == "{":
-            # mos keluvchi yopuvchi '}' ni topamiz
-            depth, j = 0, i
-            while j < n:
-                if masked[j] == "{":
-                    depth += 1
-                elif masked[j] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                j += 1
+            j = find_close(masked, i)
+            j = n if j < 0 else j
             sig_raw = masked[last_boundary:i]
             # preprotsessor qatorlarini (#include ...) signaturadan chiqarib tashlaymiz
             sig_lines = [ln for ln in sig_raw.split("\n") if not ln.strip().startswith("#")]
             sig = " ".join(ln.strip() for ln in sig_lines).strip()
             parsed = _parse_signature(sig) if sig.endswith(")") else None
+            if not parsed and sig.endswith(")"):
+                skipped.append((last_boundary, j + 1))
             if parsed:
                 name, ret_type, params = parsed
                 sig_start = last_boundary + (len(sig_raw) - len(sig_raw.lstrip()))
@@ -218,8 +229,6 @@ def parse(text: str) -> ParsedInput:
                     name=name,
                     ret_type=ret_type,
                     params=params,
-                    signature=re.sub(r"\s+", " ", text[sig_start:i]).strip(),
-                    body=text[i:j + 1],
                     text=text[sig_start:j + 1],
                     start_line=start_line,
                     end_line=end_line,
@@ -229,12 +238,14 @@ def parse(text: str) -> ParsedInput:
             last_boundary = i
             continue
         i += 1
-    # Funksiyalardan tashqaridagi qism: extern e'lonlar, typedef, global massivlar
+    # Funksiyalardan tashqaridagi qism: extern e'lonlar, typedef, global massivlar.
+    # Tanilmagan funksiyasimon bloklar (masalan, `__int64 (**init_proc())(void) {...}`) kiritilmaydi.
+    spans = sorted([(text.find(f.text), text.find(f.text) + len(f.text)) for f in functions] + skipped)
     preamble, pos = [], 0
-    for f in functions:
-        start = text.find(f.text, pos)
-        preamble.append(text[pos:start])
-        pos = start + len(f.text)
+    for start, end in spans:
+        if start >= pos:
+            preamble.append(text[pos:start])
+            pos = end
     preamble.append(text[pos:])
     return ParsedInput(style=detect_style(text), functions=functions,
                        data_blobs=parse_data_blobs(text), raw=text,

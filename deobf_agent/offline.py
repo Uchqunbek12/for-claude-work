@@ -1,15 +1,13 @@
 """Offline (bepul) rejim: LLM'siz, faqat statik tahlil asosida natija.
 
 Nima qiladi:
-  * isbotlangan soddalashtirishlarni kodga qo'llaydi: MBA ifodalar -> oddiy ifoda,
-    yashirin konstantalar -> son, soxta shartlar -> 0/1;
-  * qolgan topilmalarni (flattening xaritasi, dekodlangan satrlar, keraksiz
-    o'zgaruvchilar) kod boshida izoh sifatida beradi;
+  * tasodifiy test bilan tasdiqlangan soddalashtirishlarni kodga qo'llaydi: MBA ifodalar ->
+    oddiy ifoda, yashirin konstantalar -> son, soxta shartlar -> 0/1;
+  * oddiy flattening'ni yechadi (unflatten.py), o'lik tarmoqlar va keraksiz o'zgaruvchilarni olib tashlaydi;
+  * qolgan topilmalarni (holatlar xaritasi, dekodlangan satrlar) kod boshida izoh sifatida beradi;
   * natijani LLM qaytaradigan tuzilmada (DeobfResult) qaytaradi.
 
-Cheklov: boshqaruv oqimini (flattening) to'liq qayta qurish va mazmunli nomlar berish
-uchun "tushunish" kerak — bu LLM rejimining vazifasi. Offline rejim natijasi
-"qisman soddalashtirilgan kod + tahlil hisoboti" bo'ladi.
+Murakkab holatlar va mazmunli nomlar berish — LLM rejimining vazifasi.
 """
 
 from __future__ import annotations
@@ -18,93 +16,76 @@ import re
 
 from . import expr as E
 from . import parser as P
-from .unflatten import unflatten
-from .detectors import AnalysisResult, _LOGIC_OPS, _balanced, _statements, _split_stmt, simplify_mba, to_c
+from .detectors import AnalysisResult, _expressions, _split_stmt, detect_dead_variables, is_declaration, \
+    is_logic, looks_like_mba, simplify_mba, var_types
+from .explain import TECH_NAMES_UZ, simple_explanation, simple_summary
 from .models import FunctionInfo
-from .parser import _mask_comments_and_strings
 from .schema import Block, DeobfResult
-
-TECH_NAMES_UZ = {
-    "mba": "MBA ifoda",
-    "opaque_predicate": "Soxta shart (opaque predicate)",
-    "control_flow_flattening": "Boshqaruv oqimini tekislash (flattening)",
-    "encoded_strings": "Kodlangan satr",
-    "encoded_constants": "Yashirilgan konstanta",
-    "dead_code": "O'lik / keraksiz kod",
-    "known_constants": "Mashhur algoritm konstantasi",
-}
+from .unflatten import unflatten
 
 
-def _rewrite(node, is_condition: bool = False):
+def _rewrite(node, types: E.Types, is_condition: bool = False):
     """Ifoda daraxtini soddalashtiradi (faqat tasodifiy test bilan tasdiqlangan o'zgarishlar)."""
     if node[0] in ("num", "var"):
         return node
-    names = E.variables(node)
-    if not names and node[0] != "cast":
-        try:
-            v = E.evaluate(node, {})[0] & 0xFFFFFFFFFFFFFFFF
-            return ("num", v, 64 if v > 0xFFFFFFFF else 32, False)
+    if not E.variables(node) and any(n[0] == "bin" for n in E.subnodes(node)):
+        try:                                  # faqat haqiqiy hisob yig'iladi (-5 kabi literal emas)
+            v, bits, signed = E.evaluate(node, {})
+            return ("num", v & ((1 << bits) - 1), bits, signed)
         except E.ExprError:
             return node
-    if is_condition and names:
-        const = E.is_constant(node, n=3000)
+    if is_condition and E.variables(node):
+        const = E.is_constant(node, 3000, types)
         if const is not None:
             return ("num", int(bool(const)), 32, True)
-    logic = node[0] == "cond" or (node[0] == "bin" and node[1] in _LOGIC_OPS) or (node[0] == "un" and node[1] == "!")
-    if not logic:
-        arith, bitw = E.count_ops(node)
-        if arith >= 1 and bitw >= 1 and arith + bitw >= 3:
-            simple = simplify_mba(node)
-            if simple:
-                return E.parse(simple)
+    if not is_logic(node) and looks_like_mba(node):
+        simple = simplify_mba(node, types)
+        if simple:
+            return E.parse(simple)
     # bolalarini rekursiv soddalashtiramiz
     if node[0] == "un":
-        return ("un", node[1], _rewrite(node[2], is_condition and node[1] == "!"))
+        return ("un", node[1], _rewrite(node[2], types, is_condition and node[1] == "!"))
     if node[0] == "bin":
         sub_cond = is_condition and node[1] in ("&&", "||")
-        return ("bin", node[1], _rewrite(node[2], sub_cond), _rewrite(node[3], sub_cond))
+        return ("bin", node[1], _rewrite(node[2], types, sub_cond), _rewrite(node[3], types, sub_cond))
     if node[0] == "cast":
-        return ("cast", node[1], node[2], _rewrite(node[3]))
+        return ("cast", node[1], node[2], _rewrite(node[3], types))
     if node[0] == "cond":
-        return ("cond", _rewrite(node[1], True), _rewrite(node[2]), _rewrite(node[3]))
+        return ("cond", _rewrite(node[1], types, True), _rewrite(node[2], types), _rewrite(node[3], types))
     return node
 
 
-def _simplify_text(text: str, is_condition: bool) -> str | None:
+def _simplify_text(text: str, is_condition: bool, types: E.Types) -> str | None:
     try:
         node = E.parse(text)
     except E.ExprError:
         return None
-    new = _rewrite(node, is_condition)
-    if new == node:
-        return None
-    return to_c(new)
+    new = _rewrite(node, types, is_condition)
+    return None if new == node else E.to_c(new)
 
 
 def simplify_code(func: FunctionInfo) -> tuple[str, list[tuple[int, str, str]]]:
     """Funksiya matniga soddalashtirishlarni qo'llaydi. Natija: (yangi_kod, [(qator, eski, yangi)])."""
     lines = func.text.splitlines()
     changes: list[tuple[int, str, str]] = []
-    for st in _statements(func):
-        targets = [(h, True) for h in st.headers if ";" not in h]
-        assigns, _ = _split_stmt(st.text)
-        targets += [(rhs, False) for _, _, rhs in assigns if rhs]
-        if not assigns and st.text.startswith("return") and st.text[6:].strip():
-            targets.append((st.text[6:].strip(), False))
-        for old, is_cond in targets:
-            new = _simplify_text(old, is_cond)
-            if not new:
-                continue
-            for idx in range(st.line - 1, min(st.line + 3, len(lines))):   # gap bir necha qatorga cho'zilishi mumkin
-                if old in lines[idx]:
-                    before = lines[idx]
-                    lines[idx] = lines[idx].replace(old, new, 1)
-                    changes.append((idx + 1, before.strip(), lines[idx].strip()))
-                    break
+    types = var_types(func)
+    for line, old, kind in _expressions(func):
+        new = _simplify_text(old, kind == "cond", types)
+        if not new:
+            continue
+        for idx in range(line - 1, min(line + 3, len(lines))):   # gap bir necha qatorga cho'zilishi mumkin
+            if old in lines[idx]:
+                before = lines[idx]
+                lines[idx] = lines[idx].replace(old, new, 1)
+                changes.append((idx + 1, before.strip(), lines[idx].strip()))
+                break
     return "\n".join(lines), changes
 
 
 # ---------------------------------------------------------------- o'lik tarmoqlarni kesish
+
+_ELSE_RE = re.compile(r"else\b")
+
 
 def _skip_ws(s: str, i: int) -> int:
     while i < len(s) and s[i].isspace():
@@ -118,31 +99,21 @@ def _stmt_end(m: str, i: int) -> int:
     if i >= len(m):
         return i
     if m[i] == "{":
-        depth = 0
-        for j in range(i, len(m)):
-            if m[j] == "{":
-                depth += 1
-            elif m[j] == "}":
-                depth -= 1
-                if depth == 0:
-                    return j + 1
-        return len(m)
+        j = P.find_close(m, i)
+        return len(m) if j < 0 else j + 1
     kw = re.match(r"(if|while|for|switch)\s*\(", m[i:])
     if kw:
-        close = _balanced(m, i + m[i:].index("("))
-        end = _stmt_end(m, close + 1)
+        close = P.find_close(m, i + m[i:].index("("), "()")
+        end = _stmt_end(m, len(m) if close < 0 else close + 1)
         if kw.group(1) == "if":
             k = _skip_ws(m, end)
-            if m.startswith("else", k) and not (k + 4 < len(m) and (m[k + 4].isalnum() or m[k + 4] == "_")):
+            if _ELSE_RE.match(m, k):
                 end = _stmt_end(m, k + 4)
         return end
     depth = 0
     for j in range(i, len(m)):
-        if m[j] == "(":
-            depth += 1
-        elif m[j] == ")":
-            depth -= 1
-        elif m[j] == ";" and depth == 0:
+        depth += (m[j] == "(") - (m[j] == ")")
+        if m[j] == ";" and depth == 0:
             return j + 1
     return len(m)
 
@@ -150,21 +121,21 @@ def _stmt_end(m: str, i: int) -> int:
 def prune_constant_branches(code: str) -> str:
     """if (0) {...} va if (1) {...} else {...} kabi tarmoqlarni soddalashtiradi."""
     for _ in range(50):
-        m = _mask_comments_and_strings(code)
+        m = P.mask_code(code)
         hit = re.search(r"\bif\s*\(\s*([01])\s*\)", m)
         if not hit:
             return code
         then_start = _skip_ws(m, hit.end())
         then_end = _stmt_end(m, then_start)
         k = _skip_ws(m, then_end)
-        has_else = m.startswith("else", k) and not (k + 4 < len(m) and (m[k + 4].isalnum() or m[k + 4] == "_"))
-        else_start = _skip_ws(m, k + 4) if has_else else None
-        else_end = _stmt_end(m, else_start) if has_else else None
-        if hit.group(1) == "0":
-            repl = code[else_start:else_end] if has_else else ""
+        if _ELSE_RE.match(m, k):
+            else_start = _skip_ws(m, k + 4)
+            else_end = _stmt_end(m, else_start)
+            keep = code[else_start:else_end] if hit.group(1) == "0" else code[then_start:then_end]
+            code = code[:hit.start()] + keep + code[else_end:]
         else:
-            repl = code[then_start:then_end]
-        code = code[:hit.start()] + repl + code[(else_end if has_else else then_end):]
+            keep = "" if hit.group(1) == "0" else code[then_start:then_end]
+            code = code[:hit.start()] + keep + code[then_end:]
     return code
 
 
@@ -181,67 +152,65 @@ def remove_dead_variables(code: str, dead: list[str]) -> str:
         # 3) oddiy qiymat berishlar: "junk = k * 7;" / "junk ^= h;" -> ";" (keyin tozalanadi)
         code = re.sub(rf"\b{v}\s*(?:=|\+=|-=|\*=|\^=|\|=|&=|<<=|>>=)(?!=)[^;]*;", ";", code)
     # "if (shart) ;" — bo'sh gapli shartni olib tashlaymiz (shartda funksiya chaqiruvi bo'lmasa)
-    for _ in range(50):
-        m = _mask_comments_and_strings(code)
-        found = False
+    changed = True
+    while changed:
+        changed = False
+        m = P.mask_code(code)
         for hit in re.finditer(r"\bif\s*\(", m):
-            close = _balanced(m, hit.end() - 1)
+            close = P.find_close(m, hit.end() - 1, "()")
+            if close < 0:
+                break
             nxt = _skip_ws(m, close + 1)
             cond = m[hit.end():close]
             if nxt < len(m) and m[nxt] == ";" and not re.search(r"\w\s*\(|\+\+|--|[^=!<>]=[^=]", cond):
                 code = code[:hit.start()] + code[nxt + 1:]
-                found = True
+                changed = True
                 break
-        if not found:
-            break
     # yolg'iz qolgan ";" qatorlarini tozalaymiz
     return re.sub(r"^[ \t]*;[ \t]*(?:/\*.*?\*/|//[^\n]*)?[ \t]*\n", "", code, flags=re.M)
 
 
 def _static_preamble(preamble: str) -> str:
     """Kirish matnidagi e'lonlarni nomzod kodga ko'chiradi (izohlarsiz; massivlar static qilinadi)."""
-    masked = _mask_comments_and_strings(preamble)
-    lines = [ln.rstrip() for ln in masked.splitlines() if ln.strip()]
     out = []
-    for ln in lines:
+    for ln in P.mask_code(preamble).splitlines():
+        if not ln.strip():
+            continue
         if re.search(r"\w+\s*\[[^\]]*\]\s*=", ln) and not ln.lstrip().startswith("static"):
             ln = "static " + ln.lstrip()
-        out.append(ln)
+        out.append(ln.rstrip())
     return "\n".join(out)
 
 
 def _unused_locals(code: str) -> list[str]:
     """E'lon qilingan, lekin boshqa hech qayerda uchramaydigan lokal o'zgaruvchilar."""
-    masked = _mask_comments_and_strings(code)
+    masked = P.mask_code(code)
     names = []
-    for m in re.finditer(r"^[ \t]*(?:[A-Za-z_]\w*[ \t]+)+\**[ \t]*([A-Za-z_]\w*)[ \t]*;", masked, flags=re.M):
-        name = m.group(1)
-        if name not in ("return", "break", "continue") and len(re.findall(rf"\b{name}\b", masked)) == 1:
-            names.append(name)
+    for m in re.finditer(r"^[ \t]*((?:[A-Za-z_]\w*[ \t]+)+\**[ \t]*[A-Za-z_]\w*[^;{}()]*);", masked, flags=re.M):
+        text = m.group(1).strip()
+        if not is_declaration(text):
+            continue
+        for name, _, _ in _split_stmt(text):
+            if len(re.findall(rf"\b{re.escape(name)}\b", masked)) == 1:
+                names.append(name)
     return names
 
 
 def run_offline(func: FunctionInfo, analysis: AnalysisResult, preamble: str = "",
                 level: int = 2) -> DeobfResult:
     """level: 2 — flattening'ni yechish + tarmoqlarni kesish + o'lik kod; 1 — flattening'siz; 0 — faqat ifodalar."""
-    unflattened = None
-    work = func
+    work, unflattened = func, False
     if level >= 2 and analysis.state_machines:
-        unflattened = unflatten(func.text)
-        if unflattened:
-            reparsed = P.parse(unflattened).get(func.name)
-            if reparsed is not None:
-                work = reparsed
-            else:
-                unflattened = None
+        new_text = unflatten(func.text)
+        reparsed = P.parse(new_text).get(func.name) if new_text else None
+        if reparsed is not None:
+            work, unflattened = reparsed, True
     code, changes = simplify_code(work)
+    dead = [f.snippet for f in analysis.findings if f.technique == "dead_code"]
     if level >= 1:
-        code = prune_constant_branches(code)
-        dead = [f.snippet for f in analysis.findings if f.technique == "dead_code"]
-        code = remove_dead_variables(code, dead)
+        code = remove_dead_variables(prune_constant_branches(code), dead)
         reparsed = P.parse(code).get(func.name)
         if reparsed is not None:     # yangi paydo bo'lgan keraksiz o'zgaruvchilar (masalan, eski state)
-            from .detectors import detect_dead_variables
             extra = [f.snippet for f in detect_dead_variables(reparsed)] + _unused_locals(code)
             if extra:
                 code = remove_dead_variables(code, extra)
@@ -251,33 +220,27 @@ def run_offline(func: FunctionInfo, analysis: AnalysisResult, preamble: str = ""
         code = pre + "\n\n" + code
 
     header = ["/*", " * deobf-agent: offline (statik) tahlil natijasi — LLM ishlatilmadi."]
-    for name, text in analysis.decoded_strings.items():
-        header.append(f" *  - kodlangan satr {name} = \"{text}\"")
+    header += [f" *  - kodlangan satr {name} = \"{text}\"" for name, text in analysis.decoded_strings.items()]
     for sm in analysis.state_machines:
         header.append(" *  - flattening holatlar xaritasi:")
         header += [f" *      {ln.strip()}" for ln in sm.describe_uz().splitlines()]
-    dead = [f.snippet for f in analysis.findings if f.technique == "dead_code"]
     if dead:
         header.append(f" *  - keraksiz o'zgaruvchilar (natijaga ta'sir qilmaydi): {', '.join(dead)}")
-    header.append(" */")
-    code = "\n".join(header) + "\n" + code
+    code = "\n".join(header + [" */"]) + "\n" + code
 
     func_lines = func.text.splitlines()
     blocks = []
     for f in analysis.findings:
         line_text = func_lines[f.line - 1].strip() if 0 < f.line <= len(func_lines) else f.snippet
         simplified = next((new for ln, _, new in changes if ln == f.line), f.suggestion or "")
-        blocks.append(Block(
-            title=TECH_NAMES_UZ.get(f.technique, f.technique),
-            original_lines=str(f.line),
-            original_code=line_text,
-            simplified_code=simplified,
-            explanation=f.message,
-        ))
+        blocks.append(Block(title=TECH_NAMES_UZ.get(f.technique, f.technique), original_lines=str(f.line),
+                            original_code=line_text, simplified_code=simplified, explanation=f.message,
+                            simple=simple_explanation(f.technique)))
     for ln, old, new in changes:
         if not any(b.original_lines == str(ln) for b in blocks):
             blocks.append(Block(title="Soddalashtirish", original_lines=str(ln), original_code=old,
-                                simplified_code=new, explanation="Isbotlangan soddalashtirish qo'llandi."))
+                                simplified_code=new, explanation="Test bilan tasdiqlangan soddalashtirish qo'llandi.",
+                                simple=simple_explanation("simplify")))
     if unflattened:
         sm = analysis.state_machines[0]
         blocks.append(Block(
@@ -288,6 +251,7 @@ def run_offline(func: FunctionInfo, analysis: AnalysisResult, preamble: str = ""
             explanation=(f"Holatlar mashinasi ({sm.state_var} o'zgaruvchisi, {len(sm.transitions)} ta holat) graf sifatida "
                          "tahlil qilindi: holatga qaytuvchi tarmoq — tsikl (while), qolganlari — if/else. "
                          "Natijada dispetcher (while(1)+switch) va holat o'zgaruvchisi olib tashlandi."),
+            simple=simple_explanation("unflatten"),
         ))
     blocks.sort(key=lambda b: int(re.match(r"\d+", b.original_lines).group()))
 
@@ -296,18 +260,20 @@ def run_offline(func: FunctionInfo, analysis: AnalysisResult, preamble: str = ""
     summary = (f"Statik tahlil {len(analysis.findings)} ta belgi topdi"
                + (f": {', '.join(TECH_NAMES_UZ.get(t, t) for t in techniques)}." if techniques else
                   "; obfuskatsiya belgilari topilmadi.")
-               + (f" {len(changes)} ta ifoda isbotlangan holda soddalashtirildi." if changes else "")
+               + (f" {len(changes)} ta ifoda soddalashtirildi (har biri tasodifiy test bilan tekshirilgan)." if changes else "")
                + (" Flattening yechildi: boshqaruv oqimi tuzilmali ko'rinishga (while/if) qaytarildi." if unflattened else "")
-               + ("".join(f" {k}." for k in known) if known else "")
-               + " To'liq tushuntirish va boshqaruv oqimini tiklash uchun LLM rejimidan foydalaning.")
+               + "".join(f" {k}." for k in known)
+               + ("" if unflattened or not analysis.state_machines else
+                  " Boshqaruv oqimini to'liq tiklash uchun LLM rejimidan foydalaning."))
     return DeobfResult(
         function_name=func.name,
         suggested_name=func.name,
         summary=summary,
+        simple_summary=simple_summary(techniques, unflattened, bool(changes)),
         techniques=techniques,
         c_code=code,
         blocks=blocks,
         renames=[],
         confidence="medium" if changes or techniques else "low",
-        notes="Offline rejim: faqat matematik isbotlangan o'zgarishlar qo'llandi; nomlar o'zgartirilmadi.",
+        notes="Offline rejim: faqat tasodifiy testlar bilan tekshirilgan o'zgarishlar qo'llandi; nomlar o'zgartirilmadi.",
     )

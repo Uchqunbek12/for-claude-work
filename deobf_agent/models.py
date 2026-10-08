@@ -22,8 +22,6 @@ class FunctionInfo:
     name: str
     ret_type: str
     params: list[Param]
-    signature: str          # "unsigned int __fastcall mix(unsigned int a1, unsigned int a2)"
-    body: str               # { ... } ichidagi qism, qavslar bilan
     text: str               # funksiyaning to'liq matni (signatura + tana)
     start_line: int         # kirish matnidagi boshlang'ich qator raqami (1 dan)
     end_line: int
@@ -32,10 +30,6 @@ class FunctionInfo:
     @property
     def param_types(self) -> list[str]:
         return [p.type for p in self.params]
-
-    @property
-    def line_count(self) -> int:
-        return self.text.count("\n") + 1
 
 
 @dataclass

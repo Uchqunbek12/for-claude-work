@@ -12,6 +12,7 @@ dependencies = ["anthropic>=1.0", "pydantic>=2.0", "flask>=3.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+deploy = ["gunicorn>=21.0"]      # internetga chiqarish uchun ishlab chiqarish serveri
 
 [project.scripts]
 deobf = "deobf_agent.cli:main"

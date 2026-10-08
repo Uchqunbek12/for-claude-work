@@ -11,9 +11,10 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
+
+from . import sandbox
 
 # re_types.h — IDA/Ghidra turlarini e'lon qiluvchi sarlavha fayli.
 TYPES_HEADER = Path(__file__).parent / "data" / "re_types.h"
@@ -37,7 +38,9 @@ LENIENT_FLAGS = [
 class CompileResult:
     ok: bool
     errors: str = ""
-    command: list[str] = field(default_factory=list)
+
+
+NO_COMPILER = "C kompilyatori topilmadi (gcc yoki clang o'rnating)"
 
 
 def find_compiler() -> str | None:
@@ -56,11 +59,21 @@ _STD_WIDTHS = {"8", "16", "32", "64"}
 
 
 def prepare_source(code: str) -> str:
-    """Psevdokodni kompilyatsiyaga tayyorlaydi.
+    """Psevdokodni kompilyatsiyaga tayyorlaydi (dekompilyatorga xos yozuvlarni standart C ga aylantiradi).
 
-    angr kabi dekompilyatorlar katta buferlar uchun `uint224_t` kabi nostandart
-    turlar yaratadi. Bunday turlar uchun kerakli o'lchamdagi struktura e'lon qilamiz.
+    * IDA: `0x10i64`, `1ui64` kabi son qo'shimchalari -> `0x10LL`, `1ULL`;
+      `int a1@<eax>` kabi registr izohlari olib tashlanadi;
+    * Ghidra: `auVar1._8_8_` (o'zgaruvchining 8-baytidan boshlab 8 bayt) -> xotiraga ko'rsatkich orqali murojaat;
+    * angr: `uint224_t` kabi nostandart kenglikdagi turlar uchun struktura e'lon qilinadi.
     """
+    code = re.sub(r"\b(0[xX][0-9A-Fa-f]+|\d+)(u?)i(8|16|32|64)\b",
+                  lambda m: m.group(1) + m.group(2).upper() + ("LL" if m.group(3) == "64" else ""), code)
+    code = re.sub(r"@<\w+(?::\w+)?>", "", code)
+    # Ghidra: *(long *)(in_FS_OFFSET + 0x28) — stack canary o'qish -> IDA'dagi kabi __readfsqword(0x28)
+    code = re.sub(r"\*\s*\(\s*[\w\s]+\*\s*\)\s*\(\s*in_FS_OFFSET\s*\+\s*(0[xX][0-9A-Fa-f]+|\d+)\s*\)",
+                  r"__readfsqword(\1)", code)
+    code = re.sub(r"\b([A-Za-z_]\w*)\._(\d+)_(1|2|4|8)_\b",
+                  lambda m: f"(*(uint{int(m.group(3)) * 8}_t *)((unsigned char *)&{m.group(1)} + {m.group(2)}))", code)
     extra = []
     for sign, width in sorted(set(re.findall(r"\b(u?)int(\d+)_t\b", code))):
         if width in _STD_WIDTHS:
@@ -76,54 +89,45 @@ def prepare_source(code: str) -> str:
     return "/* deobf: nostandart turlar */\n" + "\n".join(extra) + "\n" + code
 
 
-def _run(cmd: list[str], timeout: float) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+def _compile(code: str, workdir: Path, name: str, flags: list[str],
+             defines: dict[str, str] | None = None) -> CompileResult:
+    cc = find_compiler()
+    if cc is None:
+        return CompileResult(ok=False, errors=NO_COMPILER)
+    workdir.mkdir(parents=True, exist_ok=True)
+    src = workdir / f"{name}.c"
+    src.write_text(prepare_source(code), encoding="utf-8")
+    cmd = [cc, *LENIENT_FLAGS, *flags, "-include", str(TYPES_HEADER)]
+    cmd += [f"-D{k}={v}" for k, v in (defines or {}).items()]
+    proc = sandbox.run(cmd + [str(src)], timeout=60, cpu_sec=30, mem_mb=1024)
+    if proc.timed_out:
+        return CompileResult(ok=False, errors="Kompilyatsiya juda uzoq davom etdi (60 s)")
+    return CompileResult(ok=proc.returncode == 0, errors=_clean(proc.stderr, workdir))
 
 
-def syntax_check(code: str, workdir: Path, name: str = "candidate", timeout: float = 30) -> CompileResult:
+def syntax_check(code: str, workdir: Path) -> CompileResult:
     """Kodni faqat sintaksis va turlar bo'yicha tekshiradi (binar fayl yaratmaydi)."""
-    cc = find_compiler()
-    if cc is None:
-        return CompileResult(ok=False, errors="C kompilyatori topilmadi (gcc yoki clang o'rnating)")
-    workdir.mkdir(parents=True, exist_ok=True)
-    src = workdir / f"{name}.c"
-    src.write_text(prepare_source(code), encoding="utf-8")
-    cmd = [cc, *LENIENT_FLAGS, "-fsyntax-only", "-include", str(TYPES_HEADER), str(src)]
-    proc = _run(cmd, timeout)
-    return CompileResult(ok=proc.returncode == 0, errors=_clean(proc.stderr, workdir), command=cmd)
+    return _compile(code, workdir, "candidate", ["-fsyntax-only"])
 
 
-def compile_object(code: str, workdir: Path, name: str, defines: dict[str, str] | None = None,
-                   timeout: float = 60) -> tuple[CompileResult, Path]:
-    """Kodni obyekt faylga (.o) kompilyatsiya qiladi. defines — -D makroslar."""
-    cc = find_compiler()
+def compile_object(code: str, workdir: Path, name: str,
+                   defines: dict[str, str] | None = None) -> tuple[CompileResult, Path]:
+    """Kodni obyekt faylga (.o) kompilyatsiya qiladi. defines — -D makroslar (nomni almashtirish uchun)."""
     obj = workdir / f"{name}.o"
-    if cc is None:
-        return CompileResult(ok=False, errors="C kompilyatori topilmadi"), obj
-    workdir.mkdir(parents=True, exist_ok=True)
-    src = workdir / f"{name}.c"
-    src.write_text(prepare_source(code), encoding="utf-8")
-    cmd = [cc, *LENIENT_FLAGS, "-O0", "-c", "-include", str(TYPES_HEADER)]
-    for key, value in (defines or {}).items():
-        cmd.append(f"-D{key}={value}")
-    cmd += [str(src), "-o", str(obj)]
-    proc = _run(cmd, timeout)
-    return CompileResult(ok=proc.returncode == 0, errors=_clean(proc.stderr, workdir), command=cmd), obj
+    return _compile(code, workdir, name, ["-O0", "-c", "-o", str(obj)], defines), obj
 
 
-def link(objects: list[Path], output: Path, timeout: float = 60) -> CompileResult:
+def link(objects: list[Path], output: Path) -> CompileResult:
     cc = find_compiler()
     if cc is None:
-        return CompileResult(ok=False, errors="C kompilyatori topilmadi")
-    cmd = [cc, *map(str, objects), "-o", str(output)]
-    proc = _run(cmd, timeout)
-    return CompileResult(ok=proc.returncode == 0, errors=_clean(proc.stderr, output.parent), command=cmd)
+        return CompileResult(ok=False, errors=NO_COMPILER)
+    proc = sandbox.run([cc, *map(str, objects), "-o", str(output)], timeout=60, cpu_sec=30, mem_mb=1024)
+    return CompileResult(ok=proc.returncode == 0, errors=_clean(proc.stderr, output.parent))
 
 
 def _clean(stderr: str, workdir: Path) -> str:
     """Xato matnidan vaqtinchalik papka yo'llarini olib tashlaydi (LLM uchun qisqaroq bo'lsin)."""
-    text = stderr.replace(str(workdir) + os.sep, "")
-    lines = text.strip().splitlines()
+    lines = stderr.replace(str(workdir) + os.sep, "").strip().splitlines()
     if len(lines) > 40:  # juda uzun xato ro'yxatini qisqartiramiz — tokenlarni tejash uchun
         lines = lines[:40] + [f"... (yana {len(lines) - 40} qator)"]
     return "\n".join(lines)

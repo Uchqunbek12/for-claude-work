@@ -19,7 +19,9 @@ from pathlib import Path
 
 from . import __version__, parser, report
 from .agent import AgentConfig, deobfuscate_text
-from .llm import DEFAULT_MODEL, MODEL_ALIASES, load_dotenv
+from .llm import DEFAULT_MODEL, EFFORTS, LANGUAGES, MODEL_ALIASES, load_dotenv
+
+_DEFAULTS = AgentConfig()     # standart qiymatlar manbai (takrorlamaslik uchun)
 
 
 def _read_input(path: str) -> str:
@@ -132,10 +134,15 @@ def cmd_check(args) -> int:
 
 
 def cmd_web(args) -> int:
+    import os
     import socket
     import threading
     import webbrowser
 
+    if args.public:
+        os.environ["DEOBF_PUBLIC"] = "1"
+    from . import sandbox
+    sandbox.PUBLIC = sandbox.PUBLIC or args.public      # public rejim: kalit saqlanmaydi, cheklovlar qattiq
     from .web.app import create_app
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -177,12 +184,13 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("-f", "--function", help="faqat shu funksiyani tahlil qilish")
     a.add_argument("-m", "--model", help=f"model: {models} yoki to'liq model nomi (standart: {DEFAULT_MODEL})")
     a.add_argument("--offline", action="store_true", help="LLM'siz, faqat statik tahlil (bepul)")
-    a.add_argument("--effort", default="medium", choices=["low", "medium", "high"], help="o'ylash chuqurligi")
-    a.add_argument("--lang", default="uz", choices=["uz", "ru", "en"], help="tushuntirish tili")
-    a.add_argument("--max-rounds", type=int, default=3, help="tuzatish urinishlari soni (standart: 3)")
-    a.add_argument("--tests", type=int, default=2000, help="differensial testlar soni")
-    a.add_argument("--max-tokens", type=int, default=16000, help="javob uchun maksimal tokenlar")
-    a.add_argument("--cache-dir", default=".deobf_cache", help="disk kesh papkasi")
+    a.add_argument("--effort", default=_DEFAULTS.effort, choices=EFFORTS, help="o'ylash chuqurligi")
+    a.add_argument("--lang", default=_DEFAULTS.language, choices=LANGUAGES, help="tushuntirish tili")
+    a.add_argument("--max-rounds", type=int, default=_DEFAULTS.max_rounds,
+                   help=f"tuzatish urinishlari soni (standart: {_DEFAULTS.max_rounds})")
+    a.add_argument("--tests", type=int, default=_DEFAULTS.n_tests, help="differensial testlar soni")
+    a.add_argument("--max-tokens", type=int, default=_DEFAULTS.max_tokens, help="javob uchun maksimal tokenlar")
+    a.add_argument("--cache-dir", default=_DEFAULTS.cache_dir, help="disk kesh papkasi")
     a.add_argument("--no-cache", action="store_true", help="disk keshdan foydalanmaslik")
     a.add_argument("--format", default="md", choices=["md", "json", "html"], help="hisobot formati")
     a.add_argument("-o", "--output", help="hisobotni faylga saqlash")
@@ -197,6 +205,8 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--host", default="127.0.0.1")
     w.add_argument("--port", type=int, default=5000)
     w.add_argument("--no-browser", action="store_true", help="brauzerni avtomatik ochmaslik")
+    w.add_argument("--public", action="store_true",
+                   help="internetga chiqariladigan demo rejimi (kalit saqlanmaydi, cheklovlar qattiq)")
     w.set_defaults(func=cmd_web)
 
     c = sub.add_parser("check", help="diagnostika: o'rnatish, .env, API kalit, gcc")
@@ -207,7 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
     e = sub.add_parser("eval", help="test namunalari bo'yicha baholash")
     e.add_argument("-m", "--model", help=f"model: {models}")
     e.add_argument("--offline", action="store_true")
-    e.add_argument("--effort", default="medium", choices=["low", "medium", "high"])
+    e.add_argument("--effort", default=_DEFAULTS.effort, choices=EFFORTS)
     e.add_argument("--source", default="angr", help="psevdokod manbasi: samples/decompiled/<id>.<source>.c "
                    "(angr, ida, ghidra)")
     e.add_argument("-o", "--output", default="docs/baholash_natijalari.md", help="natijalar jadvali fayli")

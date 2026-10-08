@@ -1,104 +1,93 @@
 <!doctype html>
 <html lang="uz">
 <head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deobf Agent</title>
-{% include "_head.html" %}
-<style>
-form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 12px; }
-label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-textarea { width: 100%; min-height: 280px; resize: vertical; padding: 10px; border-radius: 8px;
-  border: 1px solid var(--border); background: var(--code-bg); color: var(--text); }
-select, input[type=text], input[type=file] { width: 100%; padding: 7px 8px; border-radius: 8px;
-  border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; }
-button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 9px 18px;
-  font: inherit; font-weight: 600; cursor: pointer; }
-button:disabled { opacity: .6; cursor: wait; }
-button.secondary { background: var(--panel); color: var(--accent); border: 1px solid var(--accent); }
-.hint.ok { color: var(--ok); } .hint.bad { color: var(--bad); }
-.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; }
-.hint { font-size: 13px; color: var(--muted); }
-.error { background: var(--bad-soft); color: var(--bad); border-radius: 8px; padding: 10px 12px; }
-.downloads a { margin-right: 12px; color: var(--accent); }
-</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" onload="hljs.highlightAll()"></script>
+{% include "_style.html" %}
 </head>
 <body>
 <main>
-  <h1>Deobf Agent</h1>
-  <p class="lead">Obfuskatsiyalangan psevdokodni (IDA / Ghidra / angr) soddalashtiradi va har bir blokni tushuntiradi.</p>
+<header><h1>deobf-agent</h1><span>chalkash psevdokodni soddalashtiradi va tushuntiradi</span></header>
 
-  <form class="panel" method="post" action="{{ url_for('analyze') }}" enctype="multipart/form-data" id="form">
-    <label for="code">Psevdokod (IDA'da F5 → Ctrl+A → Ctrl+C, so'ng shu yerga joylang)</label>
-    <textarea id="code" name="code" spellcheck="false" placeholder="unsigned int __fastcall sub_401136(unsigned int a1, unsigned int a2) { ... }">{{ form.code }}</textarea>
-    <div class="row">
-      <div><label for="sample">Namuna yuklash</label>
-        <select id="sample"><option value="">— tanlang —</option>
-          {% for sid in samples %}<option value="{{ sid }}">{{ sid }}</option>{% endfor %}
-        </select></div>
-      <div><label for="file">yoki fayl (.c / .txt)</label><input type="file" id="file" name="file" accept=".c,.txt,.h,.cpp"></div>
-      <div><label for="function">Funksiya nomi (ixtiyoriy)</label><input type="text" id="function" name="function" value="{{ form.function }}" placeholder="hammasi"></div>
-    </div>
-    <div class="row">
-      <div><label for="engine">Model (dvigatel)</label>
-        <select id="engine" name="engine">
-          {% for value, title in engines %}<option value="{{ value }}" {% if form.engine == value %}selected{% endif %}>{{ title }}</option>{% endfor %}
-        </select></div>
-      <div id="custom-wrap" {% if form.engine != "custom" %}hidden{% endif %}><label for="custom_model">Model nomi</label>
-        <input type="text" id="custom_model" name="custom_model" value="{{ form.custom_model }}" placeholder="claude-sonnet-5-5"></div>
-      <div><label for="effort">O'ylash chuqurligi (effort)</label>
-        <select id="effort" name="effort">
-          {% for e in ["low", "medium", "high"] %}<option {% if form.effort == e %}selected{% endif %}>{{ e }}</option>{% endfor %}
-        </select></div>
-      <div><label for="lang">Tushuntirish tili</label>
-        <select id="lang" name="lang">
-          {% for v, t in [("uz", "O'zbekcha"), ("ru", "Русский"), ("en", "English")] %}<option value="{{ v }}" {% if form.lang == v %}selected{% endif %}>{{ t }}</option>{% endfor %}
-        </select></div>
-    </div>
-    <div class="actions">
-      <button type="submit" id="submit">Tahlil qilish</button>
-      <button type="button" id="check" class="secondary">Kalitni tekshirish</button>
-      <span class="hint" id="status">{% if not has_key %}⚠️ API kalit topilmadi — faqat "Offline" ishlaydi. Loyiha papkasidagi .env fayliga ANTHROPIC_API_KEY=sk-ant-... yozing va Web UI'ni qayta ishga tushiring.{% else %}API kalit topildi. Ishlashini tekshirish uchun "Kalitni tekshirish" tugmasini bosing (bepul).{% endif %}</span>
-    </div>
-  </form>
+<form method="post" action="{{ url_for('analyze') }}#natija" enctype="multipart/form-data" id="form">
+  <div class="src-bar">
+    <label for="code"><b>Psevdokod</b></label>
+    <span>
+      <label>Namuna <select id="sample"><option value="">—</option>
+        {% for sid in samples %}<option value="{{ sid }}">{{ sid }}</option>{% endfor %}</select></label>
+      <label class="filebtn">Fayldan…<input type="file" id="file" name="file" accept=".c,.txt,.h,.cpp"></label>
+    </span>
+  </div>
+  <textarea id="code" name="code" spellcheck="false" placeholder="IDA: F5 → Ctrl+A → Ctrl+C, keyin shu yerga joylang.&#10;Ghidra, angr yoki oddiy C kodi ham bo'ladi.">{{ form.code }}</textarea>
 
-  {% if error %}<div class="panel"><div class="error">{{ error }}</div></div>{% endif %}
-  {% if data %}
-    <div class="panel downloads">Yuklab olish:
-      <a href="{{ url_for('download', rid=rid, fmt='md') }}">Markdown</a>
-      <a href="{{ url_for('download', rid=rid, fmt='html') }}">HTML</a>
-      <a href="{{ url_for('download', rid=rid, fmt='json') }}">JSON</a>
-    </div>
-    {% include "_report.html" %}
-  {% endif %}
+  <div class="opts">
+    <label>Model <select id="engine" name="engine">
+      {% for value, title in engines %}<option value="{{ value }}" {% if form.engine == value %}selected{% endif %}>{{ title }}</option>{% endfor %}
+    </select></label>
+    <label id="custom-wrap" {% if form.engine != "custom" %}hidden{% endif %}>Model nomi
+      <input type="text" id="custom_model" name="custom_model" value="{{ form.custom_model }}" placeholder="claude-sonnet-5-5" size="18"></label>
+    <label>Chuqurlik <select id="effort" name="effort">
+      {% for v, t in [("low", "past"), ("medium", "o'rta"), ("high", "yuqori")] %}<option value="{{ v }}" {% if form.effort == v %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select></label>
+    <label>Til <select id="lang" name="lang">
+      {% for v, t in [("uz", "O'zbekcha"), ("ru", "Русский"), ("en", "English")] %}<option value="{{ v }}" {% if form.lang == v %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select></label>
+    <label>Funksiya <input type="text" id="function" name="function" value="{{ form.function }}" placeholder="hammasi" size="12"></label>
+    {% if public %}<label id="key-wrap">Sizning kalitingiz
+      <input type="password" id="api_key" name="api_key" autocomplete="off" placeholder="sk-ant-..." size="18"></label>{% endif %}
+  </div>
+
+  <div class="actions">
+    <button type="submit" id="submit">Tahlil qilish</button>
+    <button type="button" id="check" class="link">Kalitni tekshirish</button>
+    <span id="status">{% if public %}Ochiq demo. Offline bepul; Claude uchun o'z kalitingizni kiriting — u saqlanmaydi.{% elif has_key %}API kalit bor.{% else %}API kalit yo'q — faqat Offline ishlaydi.{% endif %}</span>
+  </div>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+</form>
+
+{% if data %}
+<section id="natija">
+  <h2 class="result">Natija</h2>
+  {% include "_report.html" %}
+</section>
+{% endif %}
 </main>
 <script>
-  const SAMPLES = {{ samples|tojson }};
-  document.getElementById("sample").addEventListener("change", (e) => {
-    if (SAMPLES[e.target.value]) document.getElementById("code").value = SAMPLES[e.target.value];
+  var SAMPLES = {{ samples|tojson }};
+  var $ = function (id) { return document.getElementById(id); };
+  $("sample").addEventListener("change", function (e) {
+    if (SAMPLES[e.target.value]) $("code").value = SAMPLES[e.target.value];
   });
-  const engineSel = document.getElementById("engine");
-  engineSel.addEventListener("change", () => {
-    document.getElementById("custom-wrap").hidden = engineSel.value !== "custom";
+  $("file").addEventListener("change", async function (e) {          // fayl matni maydonga yuklanadi
+    var f = e.target.files[0];
+    if (f) { $("code").value = await f.text(); e.target.value = ""; }
   });
-  document.getElementById("check").addEventListener("click", async () => {
-    const status = document.getElementById("status");
-    const model = engineSel.value === "custom" ? document.getElementById("custom_model").value : engineSel.value;
-    status.className = "hint";
-    status.textContent = "Tekshirilmoqda...";
+  $("engine").addEventListener("change", function () {
+    $("custom-wrap").hidden = $("engine").value !== "custom";
+  });
+  $("check").addEventListener("click", async function () {
+    var model = $("engine").value === "custom" ? $("custom_model").value : $("engine").value;
+    var body = new URLSearchParams({model: model});
+    if ($("api_key")) body.append("api_key", $("api_key").value);
+    $("status").className = "";
+    $("status").textContent = "Tekshirilmoqda…";
     try {
-      const resp = await fetch("{{ url_for('check_key') }}", {method: "POST", body: new URLSearchParams({model})});
-      const data = await resp.json();
-      status.className = "hint " + (data.ok ? "ok" : "bad");
-      status.textContent = (data.ok ? "" : "❌ ") + data.message;
-    } catch (e) {
-      status.className = "hint bad";
-      status.textContent = "❌ Server bilan aloqa yo'q — terminal oynasi yopilmaganini tekshiring.";
+      var resp = await fetch("{{ url_for('check_key') }}", {method: "POST", body: body});
+      var data = await resp.json();
+      $("status").className = data.ok ? "ok" : "bad";
+      $("status").textContent = data.message;
+    } catch (err) {
+      $("status").className = "bad";
+      $("status").textContent = "Server javob bermadi. Terminal oynasi ochiqmi?";
     }
   });
-  document.getElementById("form").addEventListener("submit", () => {
-    const btn = document.getElementById("submit");
-    btn.disabled = true;
-    btn.textContent = "Tahlil qilinmoqda...";
-    document.getElementById("status").textContent = "Bu bir necha soniyadan 1-2 daqiqagacha davom etishi mumkin.";
+  $("form").addEventListener("submit", function () {
+    $("submit").disabled = true;
+    $("submit").textContent = "Ishlayapti…";
+    $("status").className = "";
+    $("status").textContent = "1–2 daqiqagacha cho'zilishi mumkin.";
   });
 </script>
 </body>
