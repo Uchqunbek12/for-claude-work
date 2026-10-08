@@ -125,3 +125,66 @@ bunday turlarni avtomatik e'lon qilish qo'shildi.
 - ✅ 5 ta namuna (toza + obfuskatsiyalangan), ekvivalentligi 20 000 test bilan tasdiqlangan
 - ✅ 5 ta binar fayl va ularning haqiqiy dekompilyatsiya natijasi
 - ✅ gcc bilan ishlash moduli va differensial test moduli
+
+---
+
+## 2-bosqich. Kirish parseri (`deobf_agent/parser.py`)
+
+### 2.1. Vazifa
+Foydalanuvchi vositaga matn beradi: IDA'dan nusxalangan psevdokod, Ghidra eksporti yoki
+oddiy `.c` fayl. Parser bu matndan quyidagilarni ajratib oladi:
+1. **Uslub** — matn qaysi vositadan kelgan (`ida`, `ghidra`, `angr` yoki `c`);
+2. **Funksiyalar** — har birining nomi, qaytish turi, parametrlari, tanasi, qator raqamlari;
+3. **Chaqiruvlar** — funksiya qaysi boshqa funksiyalarni chaqiradi (masalan, `sub_401000`);
+4. **Global ma'lumotlar** — shifrlangan baytlar kabi ma'lumot massivlari.
+
+### 2.2. Nima uchun tayyor C parser ishlatmadik
+Python'da `pycparser` kabi to'liq C parserlar bor, lekin ular faqat **standart** C ni
+tushunadi. Psevdokodda esa `__fastcall`, `int a1@<eax>`, `LODWORD(v4) = 5` kabi
+nostandart yozuvlar bo'ladi va qat'iy parser ularda xato berib to'xtaydi. Shuning uchun
+soddaroq, lekin **chidamli** usulni tanladik:
+- avval izohlar (`// ...`, `/* ... */`) va satrlar (`"..."`) ichini bo'sh joy bilan
+  almashtiramiz, shunda ular ichidagi `{` `}` belgilar hisobni buzmaydi;
+- keyin figurali qavslarni sanab, har bir yuqori darajadagi `{ ... }` blokni topamiz;
+- blokdan oldingi matn `nom(...)` ko'rinishida bo'lsa, demak bu funksiya.
+  `struct S { ... };` yoki `massiv[] = { ... };` kabi bloklar e'tiborga olinmaydi.
+
+### 2.3. Uslubni aniqlash — "ball tizimi"
+Har bir vosita o'ziga xos nomlar ishlatadi. Matnda qaysi uslubning belgilari ko'p
+uchrasa, o'sha uslub tanlanadi:
+
+| Vosita | Tipik belgilar |
+|---|---|
+| IDA (Hex-Rays) | `sub_401136`, `v4`, `a1`, `_DWORD`, `__fastcall`, `LODWORD(...)`, `// [rsp+1Ch]` |
+| Ghidra | `FUN_00101149`, `param_1`, `local_10`, `iVar1`, `undefined4`, `DAT_...`, `CONCAT44(...)` |
+| angr | `// [bp-0x18]` |
+| oddiy C | yuqoridagilarning hech biri yo'q |
+
+**🔎 Kuzatuv:** birinchi versiyada angr natijasi "IDA" deb aniqlandi. Sabab: IDA'ning
+`// [rsp+..]` naqshi angr'ning `// [bp-0x18]` izohiga ham mos kelib qolgan edi. Naqsh
+aniqlashtirildi va endi 5/5 namuna `angr` deb to'g'ri aniqlanadi.
+
+### 2.4. Global ma'lumotlar formati
+Parser ikki formatni taniydi:
+```c
+// ENC @ 0x402010 (27 bayt): 14 39 30 30 ...           ← bizning angr skriptimiz formati
+unsigned char byte_4020[27] = { 0x14, 0x39, ... };     ← IDA: Shift+E → "C array" eksporti
+```
+
+### 2.5. Testlar (`tests/`)
+**pytest** — Python'da avtomatik testlar yozish uchun eng mashhur vosita. `test_` bilan
+boshlanuvchi har bir funksiya alohida test hisoblanadi. `python -m pytest` buyrug'i
+hammasini ishga tushiradi va qaysi biri o'tganini yoki yiqilganini ko'rsatadi.
+
+| Fayl | Nimani tekshiradi |
+|---|---|
+| `tests/test_parser.py` | IDA, Ghidra, angr va oddiy C uslubidagi matnni to'g'ri ajratish |
+| `tests/test_harness.py` | differensial test: ekvivalent va noekvivalent kodni farqlash; 5 ta namunaning ekvivalentligi |
+
+Natija: **9/9 test o'tdi.**
+
+### 2-bosqich natijasi
+- ✅ 4 xil uslubni taniydigan parser
+- ✅ funksiya signaturasi va parametrlarini ajratish (IDA'ning `@<eax>` kabi yozuvlari bilan ham)
+- ✅ global ma'lumotlarni o'qish
+- ✅ avtomatik testlar
