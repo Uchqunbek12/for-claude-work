@@ -1,0 +1,6 @@
+# Asosiy kutubxonalar
+anthropic>=1.0        # Claude API rasmiy Python kutubxonasi
+pydantic>=2.0         # LLM javobini tekshiriladigan tuzilma (sxema) sifatida qabul qilish
+flask>=3.0            # Web UI uchun oddiy veb-server
+# Ishlab chiquvchi uchun
+pytest>=8.0           # Avtomatik testlar

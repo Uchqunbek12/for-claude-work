@@ -1,0 +1,15 @@
+{
+  "samples": [
+    {"id": "s1_mba", "function": "mix", "ret": "unsigned int", "params": ["unsigned int", "unsigned int"],
+     "techniques": ["mba"], "description": "Ikki sonni aralashtirish; MBA ifodalar"},
+    {"id": "s2_opaque", "function": "clamp", "ret": "int", "params": ["int", "int", "int"],
+     "techniques": ["opaque_predicate", "dead_code"], "description": "Sonni oraliqqa cheklash; opaque predicate"},
+    {"id": "s3_flatten", "function": "gcd", "ret": "unsigned int", "params": ["unsigned int", "unsigned int"],
+     "techniques": ["control_flow_flattening"], "description": "EKUB (Yevklid); flattening"},
+    {"id": "s4_strings", "function": "greet_char", "ret": "int", "params": ["unsigned int"],
+     "techniques": ["encoded_strings"], "description": "XOR bilan kodlangan satr"},
+    {"id": "s5_combined", "function": "checksum", "ret": "unsigned int", "params": ["unsigned int", "unsigned int"],
+     "techniques": ["control_flow_flattening", "mba", "opaque_predicate", "dead_code", "encoded_constants"],
+     "description": "FNV-1a nazorat yig'indisi; aralash usullar"}
+  ]
+}
