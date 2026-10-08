@@ -487,3 +487,90 @@ qo'shildi va qayta tekshiruvda kenglik aniq **390px** chiqdi.
 ### 6.5. Testlar
 `tests/test_web.py`: bosh sahifa, offline tahlil va yuklab olish, soxta Claude bilan tahlil, bo'sh kirish
 xatosi, HTML ekranlash (XSS himoyasi). Natija: **33/33 test o'tdi.**
+
+---
+
+## 7-bosqich. Baholash va flattening'ni avtomatik yechish
+
+### 7.1. Baholash usuli (`deobf eval`, `deobf_agent/evaluate.py`)
+Har bir namuna uchun o'lchanadigan ko'rsatkichlar:
+| Ko'rsatkich | Ma'nosi |
+|---|---|
+| **Psevdokodga ekvivalent** | agent ham ko'radigan tekshiruv: natija kirish psevdokodi bilan bir xil ishlaydimi |
+| **Asl kodga ekvivalent** | "oltin standart": natija `samples/src/clean` dagi **toza manba** bilan 5000 testda solishtiriladi (agent toza kodni ko'rmaydi) |
+| **Usullarni aniqlash (recall)** | psevdokodda haqiqatda ko'rinib turgan usullarning necha foizi topildi |
+| **Qatorlar / CC** | psevdokod → natija → toza kod (natija toza kodga qanchalik yaqin) |
+| **Narx, vaqt, urinishlar** | tejamkorlik |
+
+`samples/manifest.json` ga `pseudocode_techniques` maydoni qo'shildi. Sababi: angr ba'zi
+konstantalarni o'zi yig'gan va `s5` dagi soxta shartni xato soddalashtirgan. Shuning uchun bu
+usullar psevdokodda yo'q, ularni "topilmadi" deb hisoblash adolatsiz bo'lardi.
+
+### 7.2. Birinchi baholash — muammo aniqlandi
+Birinchi offline baholashda murakkablik atigi **12%** kamaydi (26 → 23). Sabab: flattening
+`while(1){switch}` ko'rinishida qolib ketgan, holatlar xaritasi esa faqat izoh sifatida berilgan.
+
+### 7.3. Yechim — flattening'ni avtomatik yechish (`deobf_agent/unflatten.py`)
+Holatlar xaritasi allaqachon tiklangan edi, shuning uchun undan tuzilmali kodni **graflar nazariyasi**
+yordamida qurish mumkin:
+1. Har bir `case` — graf tuguni, `state = X` — qirra.
+2. Boshlang'ich holatdan yuramiz:
+   - bitta chiqishli tugun → tanasini yozamiz (chiziqli ketma-ketlik);
+   - shartli tugun (`state = c ? X : Y`): agar X tarmog'idan qaytib **shu tugunga** kelinsa,
+     bu **tsikl** → `while (c) { ... }`; aks holda `if (c) {...} else {...}` va ikkala tarmoq
+     qo'shiladigan tugundan davom etamiz.
+3. Xavfli holatlarda (case ichida shart ostida holat o'zgarishi, ichma-ich halqalar, fall-through)
+   algoritm **hech narsani o'zgartirmaydi** va bu ishni LLM'ga qoldiradi.
+
+**🔎 Ishlab chiqishda topilgan xatolar:**
+| Xato | Sabab | Tuzatish |
+|---|---|---|
+| "juda chuqur" — cheksiz rekursiya | halqani aniqlashda tekshirilayotgan tugunning o'zini "chetlab o'tiladiganlar" ro'yxatiga qo'shganman, natijada u hech qachon topilmagan | "tarmoqdagi biror tugundan shu tugunga qirra bormi?" degan to'g'ri tekshiruv |
+| `/* tsikl sharti */` izohi "kod" deb hisoblangan | bo'shlik asl matn bo'yicha tekshirilgan | izohlarsiz matn bo'yicha tekshirish |
+| `unsigned int st = 0xA1u;` dan `unsigned int ` qolib ketgan | e'lon ichidagi qiymat butunlay o'chirilgan | e'lon bo'lsa faqat qiymat olib tashlanadi |
+| `int h = 0, junk = 0;` → `int h = 0, ;` | keraksiz o'zgaruvchini o'chirish e'lonlarni hisobga olmagan | e'lon tuzilishiga mos uch bosqichli o'chirish |
+
+Barcha xatolarni **differensial test va zaxira darajalari** ushlab qoldi: noto'g'ri natija
+foydalanuvchiga hech qachon "tasdiqlangan" deb ko'rsatilmadi, vosita ehtiyotkorroq darajaga qaytdi.
+
+### 7.4. Offline rejim darajalari
+| Daraja | Nima qilinadi |
+|---|---|
+| 2 | flattening'ni yechish + tarmoqlarni kesish + o'lik kodni olib tashlash + ifodalar |
+| 1 | tarmoqlarni kesish + o'lik kod + ifodalar |
+| 0 | faqat ifodalar (MBA, konstantalar, soxta shartlar → 0/1) |
+
+Agent 2-darajadan boshlaydi va natija tekshiruvdan o'tmasa, pastroq darajaga qaytadi.
+
+### 7.5. Yakuniy offline natijalar
+| Namuna | Psevdokodga ekv. | Asl kodga ekv. | Usullar | Qatorlar (psevdo → natija → toza) | CC |
+|---|---|---|---|---|---|
+| s1_mba | ✅ | ✅ | 100% | 10 → 10 → 4 | 1 → 1 → 1 |
+| s2_opaque | ✅ | ❌ (angr xatosi) | 100% | 17 → 10 → 6 | 7 → 5 → 3 |
+| s3_flatten | ✅ | ✅ | 100% | 28 → 12 → 6 | 7 → **2** → 2 |
+| s4_strings | ✅ | ✅ | 100% | 9 → 10 → 4 | 2 → 2 → 1 |
+| s5_combined | ✅ | ✅ | 100% | 42 → 18 → 8 | 9 → **2** → 2 |
+| **Jami** | **5/5** | **4/5** | **100%** | **106 → 60 (−43%)** | **26 → 12 (−54%)** |
+
+`s3` va `s5` da tsiklomatik murakkablik **toza kod darajasiga** (2) tushdi, va bu **LLM'siz, $0 ga** erishildi.
+
+### 7.6. LLM rejimini baholash
+Bu muhitda Claude API kaliti yo'q, shuning uchun LLM rejimi natijalari **hali o'lchanmagan**.
+Taxmin qilingan raqamlarni yozmaymiz. O'lchash uchun kalitingiz bor kompyuterda quyidagini bajaring:
+```bash
+deobf eval --model haiku -o docs/baholash_haiku.md     # 5 namuna ≈ $0.01
+```
+Kutilayotgan farq: LLM qolgan ishni bajarishi kerak — mazmunli nomlar (`v1` → `hash`), ortiqcha
+boshlang'ich qiymatlarni olib tashlash, kodlangan satrni koddan butunlay chiqarish, har bir blokka tushuntirish.
+
+### 7.7. IDA va Ghidra eksport skriptlari
+- `scripts/ida_export.py` — IDAPython (IDA Pro/Home) uchun: barcha yoki joriy funksiya psevdokodini saqlaydi;
+- `scripts/ghidra_export.java` — Ghidra GUI yoki headless rejim uchun.
+
+> ⚠️ Bu ikki skript ishlab chiqish muhitida **sinab ko'rilmagan** (u yerda IDA va Ghidra yo'q edi).
+> Faqat Python skriptining sintaksisi tekshirildi. IDA Free uchun asosiy yo'l — psevdokodni
+> nusxalash (F5 → Ctrl+A → Ctrl+C).
+
+### 7.8. Testlar
+`tests/test_unflatten.py` qo'shildi: 4 ta namunada flattening yechilishi va ekvivalentligi, if/else
+"olmos" (diamond) shakli, xavfli holatda o'zgartirmaslik. Natija: **40/40 test o'tdi.**
