@@ -13,6 +13,8 @@ select, input[type=text], input[type=file] { width: 100%; padding: 7px 8px; bord
 button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 9px 18px;
   font: inherit; font-weight: 600; cursor: pointer; }
 button:disabled { opacity: .6; cursor: wait; }
+button.secondary { background: var(--panel); color: var(--accent); border: 1px solid var(--accent); }
+.hint.ok { color: var(--ok); } .hint.bad { color: var(--bad); }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; }
 .hint { font-size: 13px; color: var(--muted); }
 .error { background: var(--bad-soft); color: var(--bad); border-radius: 8px; padding: 10px 12px; }
@@ -36,10 +38,12 @@ button:disabled { opacity: .6; cursor: wait; }
       <div><label for="function">Funksiya nomi (ixtiyoriy)</label><input type="text" id="function" name="function" value="{{ form.function }}" placeholder="hammasi"></div>
     </div>
     <div class="row">
-      <div><label for="engine">Dvigatel</label>
+      <div><label for="engine">Model (dvigatel)</label>
         <select id="engine" name="engine">
           {% for value, title in engines %}<option value="{{ value }}" {% if form.engine == value %}selected{% endif %}>{{ title }}</option>{% endfor %}
         </select></div>
+      <div id="custom-wrap" {% if form.engine != "custom" %}hidden{% endif %}><label for="custom_model">Model nomi</label>
+        <input type="text" id="custom_model" name="custom_model" value="{{ form.custom_model }}" placeholder="claude-sonnet-5-5"></div>
       <div><label for="effort">O'ylash chuqurligi (effort)</label>
         <select id="effort" name="effort">
           {% for e in ["low", "medium", "high"] %}<option {% if form.effort == e %}selected{% endif %}>{{ e }}</option>{% endfor %}
@@ -51,7 +55,8 @@ button:disabled { opacity: .6; cursor: wait; }
     </div>
     <div class="actions">
       <button type="submit" id="submit">Tahlil qilish</button>
-      <span class="hint" id="status">{% if not has_key %}API kalit topilmadi — faqat offline rejim ishlaydi (.env faylida ANTHROPIC_API_KEY ni sozlang).{% else %}API kalit topildi.{% endif %}</span>
+      <button type="button" id="check" class="secondary">Kalitni tekshirish</button>
+      <span class="hint" id="status">{% if not has_key %}⚠️ API kalit topilmadi — faqat "Offline" ishlaydi. Loyiha papkasidagi .env fayliga ANTHROPIC_API_KEY=sk-ant-... yozing va Web UI'ni qayta ishga tushiring.{% else %}API kalit topildi. Ishlashini tekshirish uchun "Kalitni tekshirish" tugmasini bosing (bepul).{% endif %}</span>
     </div>
   </form>
 
@@ -69,6 +74,25 @@ button:disabled { opacity: .6; cursor: wait; }
   const SAMPLES = {{ samples|tojson }};
   document.getElementById("sample").addEventListener("change", (e) => {
     if (SAMPLES[e.target.value]) document.getElementById("code").value = SAMPLES[e.target.value];
+  });
+  const engineSel = document.getElementById("engine");
+  engineSel.addEventListener("change", () => {
+    document.getElementById("custom-wrap").hidden = engineSel.value !== "custom";
+  });
+  document.getElementById("check").addEventListener("click", async () => {
+    const status = document.getElementById("status");
+    const model = engineSel.value === "custom" ? document.getElementById("custom_model").value : engineSel.value;
+    status.className = "hint";
+    status.textContent = "Tekshirilmoqda...";
+    try {
+      const resp = await fetch("{{ url_for('check_key') }}", {method: "POST", body: new URLSearchParams({model})});
+      const data = await resp.json();
+      status.className = "hint " + (data.ok ? "ok" : "bad");
+      status.textContent = (data.ok ? "" : "❌ ") + data.message;
+    } catch (e) {
+      status.className = "hint bad";
+      status.textContent = "❌ Server bilan aloqa yo'q — terminal oynasi yopilmaganini tekshiring.";
+    }
   });
   document.getElementById("form").addEventListener("submit", () => {
     const btn = document.getElementById("submit");

@@ -14,18 +14,19 @@ import uuid
 from collections import OrderedDict
 from pathlib import Path
 
-from flask import Flask, Response, abort, render_template, request
+from flask import Flask, Response, abort, jsonify, render_template, request
 
-from .. import report
+from .. import llm, report
 from ..agent import AgentConfig, deobfuscate_text
 from ..offline import TECH_NAMES_UZ
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINES = [
-    ("haiku", "Claude Haiku 5.5 — arzon (standart)"),
-    ("sonnet", "Claude Sonnet 5.5 — o'rtacha"),
-    ("opus", "Claude Opus 5.5 — eng kuchli"),
+    ("haiku", "Claude Haiku 5.5 — arzon, standart (~$0.001 / funksiya)"),
+    ("sonnet", "Claude Sonnet 5.5 — o'rtacha (~$0.03 / funksiya)"),
+    ("opus", "Claude Opus 5.5 — eng kuchli (~$0.05 / funksiya)"),
     ("offline", "Offline — bepul, LLM'siz"),
+    ("custom", "Boshqa model (nomini o'zingiz yozasiz)"),
 ]
 MAX_INPUT_CHARS = 200_000
 
@@ -48,7 +49,8 @@ def create_app(test_config: dict | None = None) -> Flask:
     samples = _load_samples()
 
     def page(**kw):
-        defaults = dict(form={"code": "", "function": "", "engine": "haiku", "effort": "medium", "lang": "uz"},
+        defaults = dict(form={"code": "", "function": "", "engine": "haiku", "effort": "medium", "lang": "uz",
+                              "custom_model": ""},
                         engines=ENGINES, samples=samples, data=None, error=None, rid=None,
                         has_key=bool(os.environ.get("ANTHROPIC_API_KEY")))
         defaults.update(kw)
@@ -60,7 +62,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.post("/analyze")
     def analyze():
-        form = {k: request.form.get(k, "") for k in ("code", "function", "engine", "effort", "lang")}
+        form = {k: request.form.get(k, "") for k in ("code", "function", "engine", "effort", "lang", "custom_model")}
         upload = request.files.get("file")
         if upload and upload.filename:
             form["code"] = upload.read().decode("utf-8", errors="replace")
@@ -69,6 +71,11 @@ def create_app(test_config: dict | None = None) -> Flask:
         if len(form["code"]) > MAX_INPUT_CHARS:
             return page(form=form, error="Matn juda uzun — bitta yoki bir nechta funksiyani kiriting.")
         engine = form["engine"] or "haiku"
+        if engine == "custom":
+            engine = form["custom_model"].strip()
+            if not engine:
+                return page(form=form, error="'Boshqa model' tanlangan, lekin model nomi yozilmagan "
+                                             "(masalan: claude-sonnet-5-5).")
         cfg = AgentConfig(model=None if engine == "offline" else engine, offline=engine == "offline",
                           effort=form["effort"] or "medium", language=form["lang"] or "uz",
                           cache_dir=app.config["CACHE_DIR"], client=app.config["CLIENT"])
@@ -82,6 +89,15 @@ def create_app(test_config: dict | None = None) -> Flask:
             results.popitem(last=False)
         data = json.loads(report.to_json(parsed, reps))
         return page(form=form, data=data, rid=rid)
+
+    @app.post("/api/check-key")
+    def check_key():
+        """Kalit va tanlangan model ishlayotganini tekshiradi (Models API — bepul)."""
+        model = (request.form.get("model") or "haiku").strip()
+        if model == "offline":
+            return jsonify(ok=True, message="Offline rejim API kalitsiz ishlaydi.")
+        ok, message = llm.check_api_key(model, client=app.config["CLIENT"])
+        return jsonify(ok=ok, message=message)
 
     @app.get("/download/<rid>.<fmt>")
     def download(rid: str, fmt: str):

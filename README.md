@@ -25,16 +25,24 @@ psevdokod → parser → statik tahlil (bepul) → Claude → tekshiruv (gcc + d
 - **Tillar:** tushuntirishlar o'zbek (standart), rus yoki ingliz tilida.
 
 ## Tez boshlash
+
+**Windows (eng oson):** loyiha papkasidagi fayllarni tartib bilan ikki marta bosing:
+`1_ornatish.bat` → `2_kalit_kiritish.bat` → `3_web_ishga_tushirish.bat`.
+Muammo bo'lsa: `4_tekshirish.bat`.
+
+**Terminal orqali:**
 ```bash
 python -m venv .venv
 .venv\Scripts\activate            # Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"
 
+deobf check                                                     # diagnostika: kalit ishlayaptimi?
 deobf analyze samples/decompiled/s3_flatten.angr.c --offline   # bepul
-echo ANTHROPIC_API_KEY=sk-ant-... > .env
-deobf analyze samples/decompiled/s3_flatten.angr.c              # Claude Haiku
+deobf analyze samples/decompiled/s3_flatten.angr.c              # Claude Haiku (standart)
+deobf analyze samples/decompiled/s3_flatten.angr.c --model sonnet
 deobf web                                                       # http://127.0.0.1:5000
 ```
+API kalit loyiha papkasidagi `.env` fayliga yoziladi: `ANTHROPIC_API_KEY=sk-ant-...`.
 Batafsil: **[docs/02_foydalanish.md](docs/02_foydalanish.md)**.
 
 ## Natijalar (offline rejim, 5 ta namuna)

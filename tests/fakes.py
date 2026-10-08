@@ -52,9 +52,24 @@ class FakeMessages:
         return self.responses.pop(0)
 
 
+class FakeModels:
+    """client.models.retrieve() — kalitni tekshirish uchun."""
+
+    def __init__(self, error=None):
+        self.error = error
+        self.calls = []
+
+    def retrieve(self, model_id):
+        self.calls.append(model_id)
+        if self.error is not None:
+            raise self.error
+        return type("ModelInfo", (), {"id": model_id, "display_name": model_id.replace("-", " ").title()})()
+
+
 class FakeClient:
-    def __init__(self, responses):
+    def __init__(self, responses=(), model_error=None):
         self.messages = FakeMessages(responses)
+        self.models = FakeModels(model_error)
 
 
 def make_result(c_code: str, name: str = "f", **kw) -> DeobfResult:

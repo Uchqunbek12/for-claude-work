@@ -5,6 +5,51 @@ Bu yo'riqnoma Windows uchun yozilgan. Linux/macOS'da buyruqlar deyarli bir xil:
 
 ---
 
+## 0. ENG OSON YO'L (Windows): 4 ta faylni ikki marta bosish
+
+Loyiha papkasida 4 ta `.bat` fayl bor. Ularni **tartib bilan, sichqoncha bilan ikki marta bosib** ishga tushiring:
+
+| Fayl | Nima qiladi | Qachon |
+|---|---|---|
+| `1_ornatish.bat` | virtual muhit yaratadi va kutubxonalarni o'rnatadi | **bir marta** |
+| `2_kalit_kiritish.bat` | API kalitni so'raydi, `.env` faylini **to'g'ri formatda** yaratadi va kalitni darhol tekshiradi | **bir marta** (kalit o'zgarsa — qayta) |
+| `3_web_ishga_tushirish.bat` | Web UI'ni ishga tushiradi va brauzerni o'zi ochadi | **har safar** ishlatganda |
+| `4_tekshirish.bat` | diagnostika: Python, kutubxonalar, `.env`, kalit, gcc — nima ishlayotganini ko'rsatadi | muammo bo'lsa |
+
+> Bu fayllar `.venv` ni "faollashtirish" talab qilmaydi va PowerShell ruxsatlari bilan bog'liq muammolarni chetlab o'tadi.
+
+### Web UI ishlashi uchun eng muhim qoida
+`3_web_ishga_tushirish.bat` qora oyna (terminal) ochadi va unda quyidagi yozuv chiqadi:
+```
+============================================================
+  Web UI ishga tushdi:  http://127.0.0.1:5000
+  Brauzerda shu manzilni oching (avtomatik ochilishi kerak).
+  DIQQAT: bu oynani YOPMANG — yopsangiz Web UI to'xtaydi.
+============================================================
+```
+- Bu qora oyna — **serverning o'zi**. U ochiq turgan paytdagina Web UI ishlaydi. Oynani kichraytirib qo'yish mumkin, lekin **yopmang**.
+- Brauzer o'zi ochilmasa, Chrome/Edge'ning manzil satriga qo'lda **`http://127.0.0.1:5000`** deb yozing.
+- Ishni tugatgach, qora oynani yoping yoki unda `Ctrl+C` bosing.
+
+### Kalit ishlayaptimi?
+`2_kalit_kiritish.bat` yoki `4_tekshirish.bat` oxirida shunday qator chiqadi:
+```
+✅ Model 'haiku': Kalit ishlayapti ✅ — model mavjud: Claude Haiku 5.5 (claude-haiku-5-5)
+```
+Bu tekshiruv **bepul**, chunki Claude hech qanday matn yaratmaydi, server faqat kalitni tasdiqlaydi.
+Web UI'da ham shunday tekshiruv bor: **"Kalitni tekshirish"** tugmasi.
+
+Agar ❌ chiqsa, uning yonida sababi yoziladi:
+
+| Xabar | Ma'nosi | Nima qilish kerak |
+|---|---|---|
+| `ANTHROPIC_API_KEY topilmadi` | `.env` fayli yo'q yoki boshqa papkada | `2_kalit_kiritish.bat` ni qayta ishga tushiring |
+| `Kalit noto'g'ri yoki bekor qilingan` | kalit noto'liq nusxalangan yoki o'chirilgan | console.anthropic.com → API Keys → yangi kalit yarating |
+| `Kalitga ruxsat yo'q` / balans bilan bog'liq xabar | hisobda mablag' yo'q | console.anthropic.com → Billing |
+| `Claude serveriga ulanib bo'lmadi` | internet yoki proksi muammosi | internet aloqasini tekshiring |
+
+---
+
 ## 1. Kerakli dasturlarni o'rnatish
 
 | Dastur | Nima uchun | Qayerdan |
@@ -45,13 +90,19 @@ python -m pytest -q
 1. <https://console.anthropic.com> saytida ro'yxatdan o'ting.
 2. **Billing** bo'limida balansni to'ldiring (minimal summa yetarli: Haiku bilan 1 ta funksiya ≈ **$0.001**).
 3. **API Keys → Create Key** — kalitni nusxalang (`sk-ant-...`). Kalit faqat bir marta ko'rsatiladi.
-4. Loyiha papkasida `.env` nomli fayl yarating va unga yozing:
+4. **`2_kalit_kiritish.bat`** ni ishga tushiring va kalitni joylang. Fayl `.env` ni o'zi yaratadi
+   va kalitni tekshiradi.
+
+   Qo'lda qilmoqchi bo'lsangiz, loyiha papkasida `.env` nomli fayl yarating (Notepad → *Save as* →
+   "Save as type: **All files**" → nom: `.env`) va unga bitta qator yozing:
    ```
    ANTHROPIC_API_KEY=sk-ant-...sizning-kalitingiz...
    ```
+   Vosita `.env` ni har qanday kodlashda (UTF-8, UTF-16) o'qiydi, `.env.txt` nomini ham qabul qiladi.
+5. Tekshiring: `4_tekshirish.bat` yoki `deobf check`.
 
 > ⚠️ `.env` fayli `.gitignore` da, ya'ni GitHub'ga yuklanmaydi. Kalitni hech qachon kod ichiga
-> yozmang va hech kimga yubormang.
+> yozmang va hech kimga yubormang (menga ham).
 
 API kalitsiz ham ishlash mumkin: `--offline` rejimi bepul (statik tahlil + avtomatik soddalashtirish).
 
@@ -82,16 +133,26 @@ psevdokod oxiriga qo'shing. Shunda vosita satrni ochib bera oladi va kodni to'li
 ## 5. Vositani ishlatish
 
 ### 5.1. Web UI (eng qulay)
-```bat
-deobf web
-```
-Brauzerda <http://127.0.0.1:5000> ni oching:
-1. psevdokodni joylang yoki **"Namuna yuklash"** dan birini tanlang;
-2. dvigatelni tanlang: **Haiku** (standart, arzon) / Sonnet / Opus / Offline;
-3. **"Tahlil qilish"** tugmasini bosing;
-4. natijani ko'ring va kerak bo'lsa **Markdown/HTML/JSON** qilib yuklab oling.
+Ishga tushirish — ikki usuldan biri:
+- `3_web_ishga_tushirish.bat` ni ikki marta bosing (**tavsiya**), yoki
+- terminalda: `.venv\Scripts\python -m deobf_agent web` (yoki `.venv` faol bo'lsa `deobf web`).
+
+Brauzer o'zi ochiladi (ochilmasa, <http://127.0.0.1:5000> ni yozing). Qora oynani yopmang.
+
+Sahifada:
+1. psevdokodni joylang (IDA: F5 → Ctrl+A → Ctrl+C → shu yerga Ctrl+V), faylni tanlang
+   yoki **"Namuna yuklash"** ro'yxatidan birini tanlang;
+2. **"Model (dvigatel)"** ro'yxatidan modelni tanlang (5.4-bo'lim);
+3. birinchi marta **"Kalitni tekshirish"** tugmasini bosing — "Kalit ishlayapti ✅" chiqishi kerak;
+4. **"Tahlil qilish"** tugmasini bosing. Claude bilan 10–60 soniya davom etadi;
+5. natijani ko'ring: tepada ✅/🟡/❌ belgisi, asl va toza kod yonma-yon, pastda bloklar bo'yicha tushuntirish;
+6. kerak bo'lsa **Markdown / HTML / JSON** qilib yuklab oling.
 
 ### 5.2. Buyruq qatori (CLI)
+> Buyruqlar ishlashi uchun avval terminalda `.venv\Scripts\activate` bajaring (cmd'da).
+> PowerShell "running scripts is disabled" xatosini bersa: `deobf` o'rniga
+> `.venv\Scripts\python -m deobf_agent` deb yozing (masalan, `.venv\Scripts\python -m deobf_agent check`).
+
 ```bat
 deobf functions gcd.ida.c                         :: fayldagi funksiyalar ro'yxati
 deobf analyze gcd.ida.c                           :: Claude Haiku bilan tahlil (standart)
@@ -115,7 +176,30 @@ Foydali parametrlar:
 
 Standart modelni doimiy o'zgartirish: `.env` fayliga `DEOBF_MODEL=sonnet` qo'shing.
 
-### 5.3. Baholash (namunalar bo'yicha)
+### 5.3. Model tanlash va "model qo'shish"
+Modellarni **qo'shish shart emas** — uchta Claude modeli vositaga allaqachon kiritilgan. Siz faqat
+qaysi birini ishlatishni **tanlaysiz**:
+
+| Model | Qisqa nomi | Narx (1 funksiya) | Qachon ishlatish |
+|---|---|---|---|
+| Claude Haiku 5.5 | `haiku` | ~$0.001 | **standart** — ko'p holatlar uchun yetarli |
+| Claude Sonnet 5.5 | `sonnet` | ~$0.03 | Haiku natijasi ❌ yoki 🟡 bo'lsa |
+| Claude Opus 5.5 | `opus` | ~$0.05 | eng murakkab funksiyalar uchun |
+| Offline | `--offline` | $0 | API kalitsiz, faqat statik tahlil |
+
+Tanlash usullari:
+- **Web UI:** "Model (dvigatel)" ro'yxatidan tanlang. Ro'yxatda bo'lmagan boshqa Claude modelini
+  ishlatish uchun **"Boshqa model"** ni tanlang va to'liq nomini yozing (masalan, `claude-sonnet-5-5`).
+  Mana shu "model qo'shish" bo'ladi. Ishlashini **"Kalitni tekshirish"** tugmasi bilan tekshiring.
+- **CLI:** `deobf analyze kod.c --model sonnet` (yoki to'liq nom: `--model claude-sonnet-5-5`).
+- **Doimiy standart:** `.env` fayliga ikkinchi qator qo'shing: `DEOBF_MODEL=sonnet`.
+  Shundan keyin `--model` yozilmasa, Sonnet ishlatiladi.
+
+> Model nomlari kodda bitta joyda — `deobf_agent/llm.py` faylidagi `MODEL_ALIASES` lug'atida.
+> Kelajakda yangi model chiqsa, uni shu yerga bitta qator qilib qo'shish kifoya
+> (`"yangi": "claude-yangi-model-nomi",`). Narxi esa `PRICES` lug'atiga qo'shiladi.
+
+### 5.4. Baholash (namunalar bo'yicha)
 ```bat
 deobf eval --offline -o docs\baholash_offline.md        :: bepul
 deobf eval --model haiku -o docs\baholash_haiku.md      :: Claude Haiku (5 namuna ≈ $0.01)
@@ -150,8 +234,12 @@ deobf eval --model haiku --source ida -o docs\baholash_haiku_ida.md
 
 | Muammo | Yechim |
 |---|---|
-| `deobf` buyrug'i topilmadi | virtual muhitni faollashtiring: `.venv\Scripts\activate` |
-| "API kalit noto'g'ri yoki yo'q" | `.env` faylini tekshiring (loyiha papkasida bo'lishi kerak) |
+| `deobf` buyrug'i topilmadi | `.bat` fayllardan foydalaning yoki `.venv\Scripts\python -m deobf_agent ...` deb yozing |
+| Web UI ochilmaydi, qora oyna darhol yopiladi | `3_web_ishga_tushirish.bat` endi xato matnini ko'rsatib to'xtaydi — matnni nusxalab yuboring. Oldin `1_ornatish.bat` bajarilganini tekshiring |
+| "port band" xatosi | Web UI allaqachon ochiq (boshqa qora oynada) yoki 5000-portni boshqa dastur ishlatyapti: `.venv\Scripts\python -m deobf_agent web --port 5050` |
+| Brauzerda "Saytga ulanib bo'lmadi" | qora oyna yopilgan — `3_web_ishga_tushirish.bat` ni qayta ishga tushiring |
+| `.ps1 cannot be loaded ... running scripts is disabled` | PowerShell cheklovi: `.bat` fayllardan yoki `cmd` dan foydalaning |
+| "API kalit noto'g'ri yoki yo'q" | `4_tekshirish.bat` ni ishga tushiring — u `.env` qayerdan qidirilganini va kalitning boshi/oxirini ko'rsatadi |
 | "C kompilyatori topilmadi" | gcc o'rnating (1-bo'lim) yoki `DEOBF_CC` muhit o'zgaruvchisida kompilyator yo'lini ko'rsating |
 | "Bog'lash (link) bo'lmadi" | psevdokod boshqa funksiyalarni chaqiradi yoki global ma'lumot yo'q — ularni ham kiriting (Shift+E) |
 | "Model so'rovni bajarishdan bosh tortdi" | `--model sonnet` bilan urinib ko'ring; natija baribir offline rejimdan beriladi |

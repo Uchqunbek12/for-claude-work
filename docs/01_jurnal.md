@@ -574,3 +574,63 @@ boshlang'ich qiymatlarni olib tashlash, kodlangan satrni koddan butunlay chiqari
 ### 7.8. Testlar
 `tests/test_unflatten.py` qo'shildi: 4 ta namunada flattening yechilishi va ekvivalentligi, if/else
 "olmos" (diamond) shakli, xavfli holatda o'zgartirmaslik. Natija: **40/40 test o'tdi.**
+
+---
+
+## 8-bosqich. Foydalanuvchi sinovidan keyingi tuzatishlar
+
+### 8.1. Muammo: Web UI ishga tushmadi
+Vositani o'z kompyuteringizda (Windows) o'rnatganingizda Web UI ishlamadi. Sabablarni birma-bir
+tekshirdik va **asosiy sabab topildi — bu ishlab chiquvchining (mening) xatosi edi:**
+
+README'da `.env` faylini `echo ANTHROPIC_API_KEY=... > .env` buyrug'i bilan yaratish tavsiya etilgan edi.
+**Windows PowerShell** bu buyruq bilan faylni **UTF-16** kodlashda yozadi, vosita esa `.env` ni faqat UTF-8
+deb o'qirdi. Natijada **har qanday** `deobf` buyrug'i (shu jumladan `deobf web`) ishga tushishdanoq
+`UnicodeDecodeError` xatosi bilan yiqilardi. Xato bu muhitda aynan takrorlab ko'rildi:
+```
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+```
+
+Windows'dagi boshqa tipik muammolar ham ko'rib chiqildi:
+| Muammo | Sabab |
+|---|---|
+| `.env` fayli `.env.txt` bo'lib saqlanadi | Notepad fayl kengaytmasini yashirincha qo'shadi |
+| `.env` UTF-8 BOM bilan saqlanadi | Notepad'ning ba'zi versiyalari, kalit nomi buziladi |
+| `deobf` buyrug'i topilmaydi | `.venv` faollashtirilmagan |
+| `Activate.ps1 cannot be loaded` | PowerShell skriptlarni ishga tushirishni taqiqlagan |
+| Brauzerda "Saytga ulanib bo'lmadi" | server oynasi (qora oyna) yopilgan, chunki u server ekanligi tushuntirilmagan edi |
+| 5000-port band | boshqa dastur yoki ikkinchi nusxa |
+
+### 8.2. Tuzatishlar
+1. **`.env` ni har qanday kodlashda o'qish** (`llm.py`): UTF-16 (BOM bilan va BOM'siz), UTF-8 BOM bilan,
+   oddiy UTF-8. `.env.txt` nomi, `set X=Y` / `export X=Y` yozuvlari va faqat kalitning o'zi yozilgan fayl ham
+   qabul qilinadi. `.env` joriy papkadan, topilmasa loyiha papkasidan qidiriladi. Funksiya **hech qachon
+   xato bilan to'xtamaydi**.
+2. **`deobf check` — diagnostika buyrug'i.** Python, virtual muhit, kutubxonalar, `.env` qayerdan
+   topilgani, kalit (xavfsiz ko'rinishda: `sk-ant-api03...1234`) va gcc tekshiriladi. Eng muhimi:
+   **kalit haqiqatan ishlayaptimi** — buning uchun Claude'ning Models API'si (`models.retrieve`) chaqiriladi.
+   Bu so'rov matn yaratmaydi, shuning uchun **bepul**. Soxta kalit bilan haqiqiy serverda sinab ko'rildi:
+   server rad etdi va vosita "Kalit noto'g'ri yoki bekor qilingan" deb to'g'ri xabar berdi.
+3. **Windows uchun `.bat` fayllar** (ikki marta bosish bilan):
+   `1_ornatish.bat` → `2_kalit_kiritish.bat` (kalitni so'raydi, `.env` ni to'g'ri yozadi va darhol tekshiradi)
+   → `3_web_ishga_tushirish.bat` → `4_tekshirish.bat`. Ular `.venv` ichidagi Python'ni to'g'ridan-to'g'ri
+   chaqiradi (`.venv\Scripts\python.exe -m deobf_agent ...`), shuning uchun faollashtirish va PowerShell
+   cheklovlari muammo bo'lmaydi. Xato bo'lsa oyna yopilmay, xato matnini ko'rsatib turadi.
+4. **Web UI ishga tushishi tushunarliroq:** brauzer avtomatik ochiladi; terminalda "bu oynani YOPMANG"
+   degan katta ogohlantirish chiqadi; port band bo'lsa, tushunarli xabar va yechim ko'rsatiladi.
+5. **Web UI'da "Kalitni tekshirish" tugmasi** — kalit va tanlangan model ishlashini bepul tekshiradi.
+6. **Model tanlash tushunarliroq:** ro'yxatda har bir modelning taxminiy narxi yozilgan; **"Boshqa model"**
+   bandi tanlansa, istalgan Claude modelining to'liq nomini yozish maydoni paydo bo'ladi. Doimiy standart
+   modelni `.env` dagi `DEOBF_MODEL=sonnet` qatori bilan o'zgartirish mumkin.
+
+### 8.3. Testlar
+`tests/test_setup.py` qo'shildi: `.env` 4 xil kodlashda, `.env.txt`, faqat kalit yozilgan fayl,
+kalitni yashirish, kalitni tekshirish (to'g'ri / noto'g'ri kalit / mavjud bo'lmagan model), `deobf check`,
+Web UI'dagi tekshirish tugmasi, "Boshqa model" maydoni. Web UI'dagi yangi elementlar Chromium'da ham
+sinab ko'rildi. Natija: **52/52 test o'tdi.**
+
+### 8.4. Xulosa
+Ishlab chiquvchining kompyuterida (Linux) hammasi ishlagan bo'lsa ham, foydalanuvchi muhitida (Windows)
+dastur ishga tushmadi. Bu dasturiy injiniringdagi muhim saboq: **vosita haqiqiy foydalanuvchi muhitida
+sinalishi kerak**, xato xabarlari esa "nima qilish kerak"ligini aytishi lozim. Shuning uchun `deobf check`
+qo'shildi: endi muammo bo'lsa, foydalanuvchi aniq qaysi qadamda xato borligini ko'radi.

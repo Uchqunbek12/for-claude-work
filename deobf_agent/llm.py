@@ -51,20 +51,116 @@ def resolve_model(name: str | None) -> str:
     return MODEL_ALIASES.get(name.lower(), name)
 
 
-def load_dotenv(path: Path = Path(".env")) -> None:
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DOTENV_INFO: dict = {"path": None, "keys": []}     # qaysi .env fayli o'qilgani (diagnostika uchun)
+
+
+def _decode_text_file(data: bytes) -> str:
+    """Faylni kodlashidan qat'i nazar o'qiydi.
+
+    Windows'da .env turli yo'llar bilan yaratiladi: PowerShell'dagi `echo ... > .env`
+    UTF-16 kodlashda yozadi, Notepad esa ba'zan UTF-8 ni BOM belgisi bilan saqlaydi.
+    Shuning uchun kodlashni faylning birinchi baytlariga qarab aniqlaymiz.
+    """
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16")
+    if data.startswith(b"\xef\xbb\xbf"):
+        return data.decode("utf-8-sig")
+    if b"\x00" in data:                         # BOM'siz UTF-16
+        return data.decode("utf-16-le", errors="replace").replace("\x00", "")
+    return data.decode("utf-8", errors="replace")
+
+
+def find_dotenv() -> Path | None:
+    """`.env` faylini qidiradi: joriy papka, so'ng loyiha papkasi.
+
+    Notepad fayl nomiga ko'rinmas `.txt` qo'shib qo'yishi mumkin (`.env.txt`) —
+    bunday faylni ham qabul qilamiz.
+    """
+    for folder in (Path.cwd(), PROJECT_ROOT):
+        for name in (".env", ".env.txt", "env.txt"):
+            p = folder / name
+            if p.is_file():
+                return p
+    return None
+
+
+def load_dotenv(path: Path | None = None) -> Path | None:
     """.env faylidan ANTHROPIC_API_KEY=... kabi qatorlarni o'qiydi (agar hali o'rnatilmagan bo'lsa).
 
     API kalitni kod ichida yozish xavfli (u GitHub'ga tushib qolishi mumkin), shuning
     uchun u .env faylida saqlanadi, .env esa .gitignore ro'yxatida.
+    Hech qachon xato bilan to'xtamaydi — muammo bo'lsa `deobf check` buni ko'rsatadi.
     """
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    path = path if path is not None else find_dotenv()
+    if path is None or not path.is_file():
+        return None
+    try:
+        text = _decode_text_file(path.read_bytes())
+    except OSError:
+        return None
+    keys = []
+    for line in text.splitlines():
+        line = line.strip().lstrip("\ufeff")
+        if not line or line.startswith("#"):
+            continue
+        if line.lower().startswith(("export ", "set ")):          # "set X=Y" / "export X=Y"
+            line = line.split(" ", 1)[1].strip()
+        if "=" not in line:
+            if line.startswith("sk-ant-"):                          # faqat kalitning o'zi yozilgan
+                os.environ.setdefault("ANTHROPIC_API_KEY", line)
+                keys.append("ANTHROPIC_API_KEY")
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        key = key.strip()
+        value = value.strip().strip('"').strip("'").strip()
+        if key:
+            os.environ.setdefault(key, value)
+            keys.append(key)
+    DOTENV_INFO.update(path=path, keys=keys)
+    return path
+
+
+def mask_key(key: str | None) -> str:
+    """Kalitni xavfsiz ko'rsatish: sk-ant-api03-...a1b2"""
+    if not key:
+        return "(yo'q)"
+    return key[:12] + "..." + key[-4:] if len(key) > 20 else "***"
+
+
+def check_api_key(model: str | None = None, client=None) -> tuple[bool, str]:
+    """Kalit va model ishlayotganini tekshiradi.
+
+    Models API (`models.retrieve`) chaqiriladi — bu matn generatsiya qilmaydi va BEPUL.
+    Natija: (muvaffaqiyat, o'zbekcha xabar).
+    """
+    model_id = resolve_model(model)
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if client is None:
+        if not key:
+            return False, ("ANTHROPIC_API_KEY topilmadi. Loyiha papkasida .env fayli yarating va unga "
+                           "ANTHROPIC_API_KEY=sk-ant-... qatorini yozing.")
+        if not key.startswith("sk-ant-"):
+            return False, f"Kalit 'sk-ant-' bilan boshlanmaydi ({mask_key(key)}) — to'liq nusxalanganini tekshiring."
+    import anthropic
+
+    try:
+        client = client or anthropic.Anthropic()
+        info = client.models.retrieve(model_id)
+    except anthropic.AuthenticationError:
+        return False, f"Kalit noto'g'ri yoki bekor qilingan ({mask_key(key)}). console.anthropic.com da yangi kalit yarating."
+    except anthropic.PermissionDeniedError as exc:
+        return False, f"Kalitga ruxsat yo'q: {exc.message}"
+    except anthropic.NotFoundError:
+        return False, f"Kalit ishlayapti, lekin '{model_id}' modeli sizga mavjud emas. Boshqa modelni tanlang."
+    except anthropic.APIConnectionError:
+        return False, "Claude serveriga ulanib bo'lmadi — internet aloqasini tekshiring."
+    except anthropic.APIStatusError as exc:
+        return False, f"Claude API xatosi ({exc.status_code}): {exc.message}"
+    except anthropic.AnthropicError as exc:
+        return False, f"Claude API xatosi: {exc}"
+    name = getattr(info, "display_name", None) or model_id
+    return True, f"Kalit ishlayapti ✅ — model mavjud: {name} ({model_id})"
 
 
 @dataclass

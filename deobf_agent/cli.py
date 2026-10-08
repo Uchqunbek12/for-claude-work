@@ -7,6 +7,7 @@ Misollar:
   deobf analyze kod.c -f sub_401136 --format html -o hisobot.html # bitta funksiya, HTML hisobot
   deobf functions kod.c                                           # fayldagi funksiyalar ro'yxati
   deobf web                                                       # brauzer interfeysi
+  deobf check                                                     # diagnostika: kalit ishlayaptimi?
   deobf eval --offline                                            # namunalar bo'yicha baholash
 """
 
@@ -71,11 +72,88 @@ def cmd_functions(args) -> int:
     return 0
 
 
+def cmd_check(args) -> int:
+    """Diagnostika: o'rnatish to'g'rimi, .env topildimi, kalit ishlayaptimi, gcc bormi."""
+    import os
+    import platform
+
+    from . import compiler, llm
+
+    ok_all = True
+
+    def line(ok: bool | None, title: str, detail: str = "") -> None:
+        mark = {True: "✅", False: "❌", None: "⚠️ "}[ok]
+        print(f"{mark} {title}" + (f": {detail}" if detail else ""))
+
+    print("deobf-agent diagnostikasi\n" + "=" * 40)
+    py_ok = sys.version_info >= (3, 10)
+    line(py_ok, "Python", f"{platform.python_version()} ({sys.executable})")
+    ok_all &= py_ok
+    in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
+    line(True if in_venv else None, "Virtual muhit (.venv)",
+         "faol" if in_venv else "faol emas — .venv ichidagi Python ishlatilmayapti, kutubxonalar topilmasligi mumkin")
+    try:
+        import anthropic
+        import flask
+
+        line(True, "Kutubxonalar", f"anthropic {anthropic.__version__}, flask o'rnatilgan")
+    except ImportError as exc:
+        line(False, "Kutubxonalar", f"{exc} — `pip install -e .` buyrug'ini bajaring")
+        return 1
+
+    env_path = llm.DOTENV_INFO.get("path")
+    if env_path:
+        hint = "" if env_path.name == ".env" else f" (fayl nomi '{env_path.name}' — ishlaydi, lekin '.env' deb nomlash tavsiya etiladi)"
+        line(True, ".env fayli", f"{env_path}{hint}")
+    else:
+        line(None, ".env fayli", f"topilmadi (qidirilgan joylar: {os.getcwd()} va {llm.PROJECT_ROOT})")
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if key:
+        src = ".env faylidan" if "ANTHROPIC_API_KEY" in llm.DOTENV_INFO.get("keys", []) else "tizim muhit o'zgaruvchisidan"
+        line(True, "ANTHROPIC_API_KEY", f"{llm.mask_key(key)} ({src})")
+    else:
+        line(False, "ANTHROPIC_API_KEY", "topilmadi — faqat --offline rejim ishlaydi")
+        ok_all = False
+
+    if key and not args.no_network:
+        print("\nKalitni Claude serverida tekshirish (bepul so'rov, matn yaratilmaydi)...")
+        models = [args.model] if args.model else list(MODEL_ALIASES)
+        for m in models:
+            ok, msg = llm.check_api_key(m)
+            line(ok, f"Model '{m}'", msg)
+            ok_all &= ok or m != (args.model or DEFAULT_MODEL)
+
+    cc = compiler.find_compiler()
+    line(True if cc else None, "C kompilyatori (gcc/clang)",
+         cc or "topilmadi — vosita ishlaydi, lekin natijalar tekshirilmaydi (⚪). docs/02_foydalanish.md, 1-bo'lim")
+    print("\nStandart model:", llm.resolve_model(None), "(o'zgartirish: --model sonnet yoki .env da DEOBF_MODEL=sonnet)")
+    print("\nNATIJA:", "hammasi tayyor ✅" if ok_all else "yuqoridagi ❌ belgili qatorlarni tuzating")
+    return 0 if ok_all else 1
+
+
 def cmd_web(args) -> int:
+    import socket
+    import threading
+    import webbrowser
+
     from .web.app import create_app
 
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        if sock.connect_ex((args.host, args.port)) == 0:
+            print(f"XATO: {args.port}-port band (ehtimol Web UI allaqachon ishlab turibdi yoki boshqa dastur "
+                  f"ishlatyapti). Brauzerda http://{args.host}:{args.port} ni ochib ko'ring yoki boshqa port "
+                  f"tanlang: deobf web --port 5050", file=sys.stderr)
+            return 1
     app = create_app()
-    print(f"Web UI: http://{args.host}:{args.port}  (to'xtatish: Ctrl+C)", file=sys.stderr)
+    url = f"http://{args.host}:{args.port}"
+    print("=" * 60, file=sys.stderr)
+    print(f"  Web UI ishga tushdi:  {url}", file=sys.stderr)
+    print("  Brauzerda shu manzilni oching (avtomatik ochilishi kerak).", file=sys.stderr)
+    print("  DIQQAT: bu oynani YOPMANG — yopsangiz Web UI to'xtaydi.", file=sys.stderr)
+    print("  To'xtatish: Ctrl+C", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    if not args.no_browser:
+        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
     app.run(host=args.host, port=args.port, debug=False, threaded=True)
     return 0
 
@@ -118,7 +196,13 @@ def build_parser() -> argparse.ArgumentParser:
     w = sub.add_parser("web", help="brauzer interfeysini ishga tushirish")
     w.add_argument("--host", default="127.0.0.1")
     w.add_argument("--port", type=int, default=5000)
+    w.add_argument("--no-browser", action="store_true", help="brauzerni avtomatik ochmaslik")
     w.set_defaults(func=cmd_web)
+
+    c = sub.add_parser("check", help="diagnostika: o'rnatish, .env, API kalit, gcc")
+    c.add_argument("-m", "--model", help="faqat shu modelni tekshirish (masalan, haiku)")
+    c.add_argument("--no-network", action="store_true", help="Claude serveriga ulanmasdan tekshirish")
+    c.set_defaults(func=cmd_check)
 
     e = sub.add_parser("eval", help="test namunalari bo'yicha baholash")
     e.add_argument("-m", "--model", help=f"model: {models}")
