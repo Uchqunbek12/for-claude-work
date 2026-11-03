@@ -565,19 +565,36 @@ def _walk(nodes: list[Node]):
         yield from _walk(n.other)
 
 
+class _TooBig(Exception):
+    """Oraliq o'zgaruvchilarni o'rniga qo'yganda ifoda juda kattalashib ketdi (eksponensial o'sish himoyasi)."""
+
+
+_MAX_FORMULA_NODES = 120
+
+
 def _subst(n, env: dict):
-    """Ifodadagi o'zgaruvchilarni ularga yozilgan ifodalar bilan almashtiradi."""
-    if n[0] == "var":
-        return env.get(n[1], n)
-    if n[0] == "num":
-        return n
-    if n[0] == "cast":
-        return ("cast", n[1], n[2], _subst(n[3], env))
-    if n[0] == "un":
-        return ("un", n[1], _subst(n[2], env))
-    if n[0] == "cond":
-        return ("cond", _subst(n[1], env), _subst(n[2], env), _subst(n[3], env))
-    return ("bin", n[1], _subst(n[2], env), _subst(n[3], env))
+    """Ifodadagi o'zgaruvchilarni ularga yozilgan ifodalar bilan almashtiradi. (daraxt, o'lcham) qaytaradi;
+    o'lcham `to_c` matni qancha uzun bo'lishini oldindan bildiradi (bir xil qism takrorlansa, u ham sanaladi)."""
+    k = n[0]
+    if k == "var":
+        return env.get(n[1], (n, 1))
+    if k == "num":
+        return n, 1
+    if k == "cast":
+        tree, size = _subst(n[3], env)
+        out = ("cast", n[1], n[2], tree), size + 1
+    elif k == "un":
+        tree, size = _subst(n[2], env)
+        out = ("un", n[1], tree), size + 1
+    elif k == "cond":
+        (a, sa), (b, sb), (c, sc) = _subst(n[1], env), _subst(n[2], env), _subst(n[3], env)
+        out = ("cond", a, b, c), sa + sb + sc + 1
+    else:
+        (a, sa), (b, sb) = _subst(n[2], env), _subst(n[3], env)
+        out = ("bin", n[1], a, b), sa + sb + 1
+    if out[1] > _MAX_FORMULA_NODES:
+        raise _TooBig
+    return out
 
 
 def readable(n, parent: str = "") -> str:
@@ -596,37 +613,30 @@ def readable(n, parent: str = "") -> str:
 def _final_expr(nodes: list[Node]):
     """Tarmoqlanishsiz funksiyaning qaytariladigan ifodasi (oraliq o'zgaruvchilar o'rniga qo'yilgan) yoki None."""
     env: dict = {}
-    for n in nodes:
-        if n.kind == "return":
-            e = _parse(n.text) if n.text else None
-            return _subst(e, env) if e is not None else None
-        parts = _split_assign(n.text) if n.kind == "simple" else None
-        rhs = _parse(parts[2]) if parts else None
-        if parts is None or rhs is None or not re.fullmatch(r"[A-Za-z_]\w*", parts[0]):
-            return None
-        lhs, op, _ = parts
-        val = _subst(rhs, env)
-        env[lhs] = ("bin", op, env.get(lhs, ("var", lhs)), val) if op else val
+    try:
+        for n in nodes:
+            if n.kind == "return":
+                e = _parse(n.text) if n.text else None
+                return _subst(e, env)[0] if e is not None else None
+            parts = _split_assign(n.text) if n.kind == "simple" else None
+            rhs = _parse(parts[2]) if parts else None
+            if parts is None or rhs is None or not re.fullmatch(r"[A-Za-z_]\w*", parts[0]):
+                return None
+            lhs, op, _ = parts
+            val, vsize = _subst(rhs, env)
+            cur, csize = env.get(lhs, (("var", lhs), 1))
+            env[lhs] = (("bin", op, cur, val), csize + vsize + 1) if op else (val, vsize)
+            if env[lhs][1] > _MAX_FORMULA_NODES:
+                return None
+    except _TooBig:
+        return None
     return None
 
 
 def straight_line_formula(nodes: list[Node]) -> str | None:
-    """Tarmoqlanish va tsiklsiz funksiyani bitta formulaga yig'adi (oraliq o'zgaruvchilar o'rniga qo'yiladi)."""
-    env: dict = {}
-    for n in nodes:
-        if n.kind == "return":
-            e = _parse(n.text)
-            return readable(_subst(e, env)) if e is not None and n.text else None
-        if n.kind != "simple":
-            return None
-        parts = _split_assign(n.text)
-        rhs = _parse(parts[2]) if parts else None
-        if parts is None or rhs is None or not re.fullmatch(r"[A-Za-z_]\w*", parts[0]):
-            return None
-        lhs, op, _ = parts
-        val = _subst(rhs, env)
-        env[lhs] = ("bin", op, env.get(lhs, ("var", lhs)), val) if op else val
-    return None
+    """Tarmoqlanish va tsiklsiz funksiyani bitta formulaga yig'adi (kichik bo'lsa)."""
+    e = _final_expr(nodes)
+    return readable(e) if e is not None else None
 
 
 def _rotate_shape(n):
@@ -696,10 +706,14 @@ def meaning(func_name: str, params: list[tuple[str, str]], func_text: str,
                    "va hamma narsa joyiga tushguncha qaytaraveradi — xuddi maktabda bolalarni bo'yi bo'yicha saflagandek.")
         elif arr_xor and loops:
             arr = ptrs[0] if ptrs else "bufer"
-            key_upd = any(n.kind == "simple" and (a := _split_assign(n.text)) and re.fullmatch(r"\w+", a[0]) and
-                          a[0] in (_split_assign(m.text)[2] if _split_assign(m.text) else "")
-                          for m in allnodes if m.kind == "simple" and _split_assign(m.text) and _ARR_RE.match(
-                              _split_assign(m.text)[0].replace(" ", "")) for n in allnodes)
+            keys: set[str] = set()                       # XOR operandi bo'lgan kalit o'zgaruvchilar
+            for m in allnodes:
+                p = _split_assign(m.text) if m.kind == "simple" else None
+                r = _parse(p[2]) if p and _ARR_RE.match(p[0].replace(" ", "")) else None
+                if r is not None and r[0] == "bin" and r[1] == "^":
+                    keys.update(E.variables(r[3]))
+            key_upd = any(m.kind == "simple" and (p := _split_assign(m.text)) and p[0] in keys
+                          and re.search(rf"\b{re.escape(p[0])}\b", p[2]) for m in allnodes)      # k = k*5 + 1 kabi yangilanish
             out = (f"{_name(arr, False)} buferining har bir baytini kalit bilan XOR qiladi (oddiy shifrlash/deshifrlash)"
                    + ("; kalit har qadamda yangilanib boradi." if key_upd else "."),
                    "Bu funksiya matn yoki ma'lumotni «qulflaydi» (yoki qulfni ochadi): har bir belgini kalit bilan aralashtirib "

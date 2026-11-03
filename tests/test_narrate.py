@@ -69,3 +69,15 @@ def test_summary_says_what_the_function_computes():
         text = (ROOT / "samples" / "decompiled" / f"{sid}.angr.c").read_text(encoding="utf-8")
         _, reports = deobfuscate_text(text, AgentConfig(offline=True))
         assert word in reports[0].result.summary, (sid, reports[0].result.summary)
+
+
+def test_long_chained_straight_line_code_does_not_blow_up():
+    # TEA kabi: har bir oraliq o'zgaruvchi oldingisidan ikki marta foydalanadi — qiymat qo'yish eksponensial o'sar edi
+    lines = ["v0 = a1;"] + [f"v{i} = v{i - 1} + (v{i - 1} ^ {i});" for i in range(1, 60)]
+    code = "unsigned f(unsigned a1)\n{\n    " + "\n    ".join(lines) + "\n    return v59;\n}"
+    import time
+
+    t0 = time.time()
+    text, simple = narrate.meaning("f", [("unsigned", "a1")], code)
+    assert time.time() - t0 < 5 and text and simple
+    assert narrate.straight_line_formula(narrate.parse_function(code)) is None      # juda katta: formula tuzilmaydi
