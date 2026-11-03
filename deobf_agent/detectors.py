@@ -204,7 +204,9 @@ def _expressions(func: FunctionInfo):
     for st in _statements(func):
         for h in st.headers:
             if h.count(";") == 0:
-                yield st.line, h, "cond"
+                # switch (X) — X mantiqiy shart emas, qiymat: uni 0/1 ga aylantirib bo'lmaydi
+                is_switch = re.search(r"\bswitch\s*\(\s*" + re.escape(h) + r"\s*\)", func.text)
+                yield st.line, h, "rhs" if is_switch else "cond"
         assigns = _split_stmt(st.text)
         for _, _, rhs in assigns:
             if rhs:
@@ -453,7 +455,10 @@ def detect_dead_variables(func: FunctionInfo) -> list[Finding]:
     params = {p.name for p in func.params}
     defs: dict[str, list[int]] = {}
     real_reads: dict[str, int] = {}
+    declared: set[str] = set()                      # faqat funksiya ichida e'lon qilingan lokal o'zgaruvchilar "keraksiz" bo'la oladi
     for st in stmts:
+        if is_declaration(st.text):
+            declared.update(n for n, _, _ in _split_stmt(st.text))
         for h in st.headers:
             for name in re.findall(r"\b[A-Za-z_]\w*\b", h):
                 real_reads[name] = real_reads.get(name, 0) + 1
@@ -475,7 +480,7 @@ def detect_dead_variables(func: FunctionInfo) -> list[Finding]:
                     real_reads[name] = real_reads.get(name, 0) + 1
     findings = []
     for var, lines in defs.items():
-        if var in params or real_reads.get(var, 0) > 0 or not lines:
+        if var in params or var not in declared or real_reads.get(var, 0) > 0 or not lines:
             continue
         findings.append(Finding(
             technique="dead_code", line=lines[0], snippet=var,
@@ -585,7 +590,7 @@ def _text_score(data: bytes) -> float:
 def _looks_like_text(data: bytes) -> bool:
     data = data.rstrip(b"\x00")
     printable = sum(1 for b in data if 32 <= b < 127 or b in (9, 10, 13))
-    if len(data) < 4 or printable / len(data) < 0.95:
+    if len(data) < 4 or len(set(data)) < 3 or printable / len(data) < 0.95:      # nol/takroriy massiv matn emas
         return False
     letters = sum(1 for b in data if chr(b).isalpha() or b == 32)
     return letters / len(data) >= 0.6
@@ -614,6 +619,8 @@ def detect_encoded_strings(func: FunctionInfo, data_blobs: dict[str, bytes]) -> 
             blobs[f"{name} (stek)"] = bytes(items.get(i, 0) for i in range(max(items) + 1))
     for name, data in blobs.items():
         best = None
+        if max(data, default=0) < 0x20:                       # faqat kichik sonlar (jadval, nollar) — kodlangan matn emas
+            continue
         if _looks_like_text(data):
             best = (None, data)
         else:
@@ -636,9 +643,11 @@ def detect_encoded_strings(func: FunctionInfo, data_blobs: dict[str, bytes]) -> 
         key, plain = best
         text = plain.rstrip(b"\x00").decode("latin-1")
         decoded[name] = text
-        how = "ochiq matn" if key is None else f"XOR kaliti 0x{key:02X}" + ("" if key in keys else " (kalit tanlab topildi)")
+        how = "ochiq matn" if key is None else f"XOR kaliti {key} (0x{key:02X})" + ("" if key in keys else " (kalit tanlab topildi)")
+        base = name.split(" ")[0]
+        line = next((i for i, ln in enumerate(masked.splitlines(), 1) if re.search(rf"\b{re.escape(base)}\b", ln)), 1)
         findings.append(Finding(
-            technique="encoded_strings", line=1, snippet=name, suggestion=text,
+            technique="encoded_strings", line=line, snippet=name, suggestion=text,
             message=f"Kodlangan satr `{name}` ({how}): \"{text}\"",
             confidence=0.95 if key in keys or key is None else 0.6, verified=key in keys or key is None))
     return findings, decoded
@@ -647,8 +656,11 @@ def detect_encoded_strings(func: FunctionInfo, data_blobs: dict[str, bytes]) -> 
 def detect_known_constants(func: FunctionInfo) -> list[Finding]:
     masked = mask_code(func.text)
     findings, seen = [], set()
-    for m in re.finditer(r"\b(0x[0-9A-Fa-f]+|\d+)[uUlL]*\b", masked):
-        v = int(m.group(1), 0) & 0xFFFFFFFF
+    for m in E.C_INT_RE.finditer(masked):
+        v = E.c_int(m.group(1))
+        if v is None:
+            continue
+        v &= 0xFFFFFFFF
         if v in KNOWN_CONSTANTS and v not in seen:
             seen.add(v)
             findings.append(Finding(

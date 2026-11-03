@@ -729,3 +729,81 @@ O'z kompyuteringizda sinash: `deobf web --public`.
 Yangi testlar qo'shildi: ko'rsatkich/bufer ekvivalentligi, s7 ikki funksiyali tahlil, public rejim
 (xavfsizlik sarlavhalari, BYOK talabi, `#include` va uzun kirishni rad etish). Butun to'plam qayta
 ishga tushirildi.
+
+---
+
+## 10-bosqich. Qayta tahlil: mustaqil audit, topilgan xatolar, Sonnet 5.5 va tushunarli bloklar
+
+Foydalanuvchi so'rovi: *"ishni boshqatdan tahlil qilib chiq, xato ketgan joying bormi yo'qmi, soddalashtir, har bir
+blokni inson tushunadigan qil, dizaynni ham o'zgartirsang mayli, API ham Sonnet 5.5 ishlatamiz, zo'r bo'lishi kerak,
+reja asosida ish qil."* Reja: (A) mustaqil audit → (B) tasdiqlangan xatolarni tuzatish → (C) Sonnet 5.5 → (D) bloklarni
+tushunarli qilish → (E) tekshiruv, hujjat, commit.
+
+### 10.1. Audit: beshta mustaqil agent
+Kodga **tegmaydigan** (faqat o'qiydigan) beshta agent parallel ishladi; har biri o'z yo'nalishida kodni yangi kirishlar
+bilan "hujum" qilib sinadi va har bir topilma uchun aniq takrorlanadigan misol keltirdi: (1) asosiy tahlil
+(parser, detektor, soddalashtirish), (2) tekshiruv qatlami (harness, verifier), (3) Claude bilan ishlash qatlami,
+(4) veb-ilova, xavfsizlik va hujjat aniqligi (brauzerda suratlar bilan), (5) blok tushuntirishlari sifati (yangi boshlovchi
+va til muharriri sifatida). Agent hisobotlari **faqat da'vo** sifatida qabul qilindi: eng og'irlari qayta ishga
+tushirib tasdiqlandi (masalan, kesilgan javobdagi xato va yordamchi funksiya nomi muammosi), qolganlari tuzatishdan
+keyin doimiy regressiya testiga aylantirildi.
+
+### 10.2. Topilgan jiddiy xatolar (men yozgan kodda) va tuzatishlar
+Eng muhim saboq: oldingi bosqichlarda "tasdiqlandi" deganimiz ba'zi hollarda **yolg'on ishonch** bergan ekan.
+
+| Xato | Oqibat | Tuzatish |
+|---|---|---|
+| `a1 == 1337 && a2 == 31337 && a3 == 42` kabi shart "doim yolg'on" deb o'chirilgan (tasodifiy sinov uni hech qachon uchratmaydi) | haqiqiy mantiq yo'qolib, natija «Tasdiqlandi» | `X == literal` da X ko'p turli qiymat olsa, shart "doimiy" deb hisoblanmaydi; harness esa parametrlarga koddagi literallarni **ketma-ket** beradi |
+| Bufer parametri bor funksiyada butun son faqat 0..512 | manfiy/katta qiymatlar umuman sinalmagan | har to'rtinchi qiymat istalgan; buferlar "qo'riqchi sahifa" (PROT_NONE) bilan o'ralgan |
+| Nomzod kod osilib qolsa/qulasa — «compiled» (ok) | noto'g'ri kod qabul qilingan | `sigaltstack`, osilish `mismatch` hisoblanadi, 5 ta farqdan keyin erta to'xtash |
+| Nomzod jadvali (`tbl[]={..5}`) asl nusxaga almashtirilgan | jadvaldagi xato yashirinib qolgan | boshqa qiymatli jadval nomzodning o'z `static` nusxasi bo'lib qoladi |
+| Nomzod `RESULT ...` satrini o'zi chop etib, aldab o'tishi mumkin | soxta «ekvivalent» | natija satrlariga tasodifiy so'z (nonce) qo'shildi |
+| `short` o'rniga `int`, `void` natijasi — sezilmagan | noto'g'ri imzo qabul qilingan | tur kengligi va void/ko'rsatkich farqi tekshiriladi |
+| Soddalashtirish natija TURINI o'zgartirgan (cast tushib qolgan) | «mismatch», lekin barcha darajalar bir xil xatoni takrorlagan | tur saqlanadi yoki cast qo'shiladi; oxirgi himoya — kod aslidek qoladi (-1 daraja) |
+| `i++`, funksiya chaqiruvi "sof qiymat" deb o'chirilgan; `-(-c)` → `--c` | chaqiruv/yon ta'sir yo'qolgan | yon ta'sirli ifodalar soddalashtirilmaydi; chiqarishda qavs |
+| Preamble'dagi matn/belgi literallari bo'sh joyga aylangan | to'g'ri kod «mismatch» | preamble aslidek ko'chiriladi |
+| `else v = ...;` o'chsa, yolg'iz `else` keyingi gapni yutgan; `else if (0)` qoldig'i | kod buzilgan | `else` ham olib tashlanadi, `if (c); else S` saqlanadi |
+| Claude kesilgan/rad etilgan javobi xom `ValidationError` bo'lib, offline zaxirani o'tkazib yuborgan; sarf hisobga olinmagan | agent to'xtagan | `create()` + qat'iy tekshiruv, avval narx hisoblanadi, tushunarli xabar |
+| Yordamchi funksiya "taklif qilingan nom" bilan chaqirilgan | test `mismatch` | asl nom saqlanadi (prompt va eslatmada aniq aytilgan) |
+| Public demo: begona kod serverda ishga tushirilgan; sandbox haqiqiy izolyatsiya emas | server xavfi | public rejimda kod **ishga tushirilmaydi** (`DEOBF_NATIVE` — faqat operator javobgarligida) |
+| Public demo: `/api/check-key` server kaliti bilan ishlagan va cheklanmagan | kalit "oracle"i | public rejimda server kaliti ishlatilmaydi, cheklov qo'yildi |
+| Tezlik cheklovi: ko'p IP'dan keyin `KeyError` (500); proksi orqasida hamma bitta IP | demo ishdan chiqishi | tuzatildi; `DEOBF_TRUSTED_PROXIES` (ProxyFix) |
+| `Dockerfile`: `wsgi.py` nusxalanmagan; 2 jarayon → yuklab olish tasodifiy 404 | konteyner ishga tushmas edi | tuzatildi, bitta jarayon, `exec`, versiyalar qotirildi |
+| Shaxsiy rejimda boshqa sayt formasi/DNS rebinding orqali so'rov yuborish mumkin edi | mahalliy kod ishga tushishi | `Host`/`Origin`/`Sec-Fetch-Site` tekshiruvi |
+
+**Brauzer sinovi o'zim kiritgan xatoni ushladi:** CSRF himoyasi birinchi variantda oddiy foydalanuvchi formasini
+ham 403 bilan rad etgan (`Referrer-Policy: no-referrer` bilan brauzer `Origin: null` yuboradi). Birlik testlar buni
+ko'rmagan edi; haqiqiy Chromium'da forma yuborib topildi va tuzatildi (`same-origin`). Saboq: veb-ilovani faqat
+test mijozi bilan emas, haqiqiy brauzerda sinash kerak.
+
+### 10.3. Sonnet 5.5 standart model
+`DEFAULT_MODEL = "sonnet"` (`claude-sonnet-5-5`, $2 / $10 har 1M token). Haiku (arzonroq) va Opus (kuchliroq) bir
+zumda tanlanadi. Narx jadvali rasmiy ma'lumot bilan solishtirildi (to'g'ri). Ogohlantirish: Sonnet 5.5 xavfsizlik
+sinflagichi zararli dastur bilan bog'liq kodni rad etishi mumkin (`cyber`) — vosita aynan shunday kod bilan ishlaydi.
+Rad etilsa, xabar buni aytadi va natija offline rejimdan olinadi. **Haqiqiy API bilan sinov o'tkazilmagan** (kalit yo'q):
+narx ($0.03–0.07/funksiya) va Claude matnlari sifati taxminiy.
+
+### 10.4. Har bir blok tushunarli: `narrate.py` + `blocks.py`
+Oldingi offline bloklar sarlavhasi usul nomi ("MBA ifoda") edi, "oddiy tilda" matni har safar bir xil tayyor paragraf.
+Endi: tozalangan funksiya daraxtga ajratiladi va har bir qadam aniq jumla bilan tushuntiriladi (mutaxassis va oddiy
+variantda); funksiya nima hisoblashi aytiladi (EKUB, FNV-1a, XOR shifrlash, saralash, formulalar); olib tashlangan
+narsalar (keraksiz qatorlar, hech qachon bajarilmaydigan tarmoqlar, tekislangan oqim, yashirin matn) alohida
+bloklar; chalkash ifoda qanday soddalashtirilgani shu blokning o'zida; ortiqcha qiymat berishlar olib tashlanadi.
+Claude uchun prompt ham qayta yozildi (blok qoidalari, oddiy kod uchun o'xshatishlar, yordamchi funksiya nomi).
+Sifat testi (`tests/test_narrate.py`) kafolatlaydi: har bir blokda ikkala matn bor, oddiy tilda kod belgilari yo'q.
+Bu testning o'zi `*((char*)&v3+...)` kabi xom kod oddiy tilga chiqib ketishini topdi va tuzatildi.
+
+### 10.5. Dizayn
+Sahifa soddalashtirildi: blok ko'rinishi "sarlavha → tushuntirish → yig'iladigan oldin/keyin kodi", oddiy tilda kod
+yig'ilgan; `highlight.js` loyihaning o'zidan (CDN yo'q, qat'iy CSP); backtick'lar xavfsiz tarzda kod shriftiga
+(`rich` filtri avval hammasini ekranlaydi); mobil ko'rinishda gorizontal skroll yo'q (390 px), konsolda xato yo'q
+(Chromium bilan tekshirilgan).
+
+### 10.6. Natija va ochiq cheklovlar
+* Testlar: **101/101** (audit regressiyalari, harness, narrate, web xavfsizlik va boshqalar). Offline baholash: 8/8
+  tasdiqlangan, 6/8 asl kodga ekvivalent (2 tasida angr dekompilyatorining o'zi xato qilgan), murakkablik 58 → 21,
+  qatorlar 216 → 95.
+* Hali **yopilmagan** (hujjatlarda ochiq aytilgan): differensial test NULL/ustma-ust ko'rsatkich, chiqish matni,
+  hosila konstantalar (`x == (1<<20)`) va statik holat desinxronini sinamaydi; unflatten murakkab holatlar mashinasi
+  (ichma-ich `switch`, `while (st != 9)` shakli) va chaqiruv argumentlari ichidagi MBA'ni yechmaydi; Claude rejimi
+  va `docker build` haqiqiy muhitda sinalmagan.

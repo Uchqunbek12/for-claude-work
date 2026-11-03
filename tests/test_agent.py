@@ -42,11 +42,21 @@ def test_agent_compile_error_feedback():
 
 
 @needs_cc
-def test_agent_keeps_best_after_max_rounds():
+def test_agent_falls_back_to_offline_when_claude_never_verifies():
+    # Claude 2 marta noto'g'ri javob bersa: yolg'on "muvaffaqiyat" yo'q, tasdiqlangan offline natija tanlanadi
     client = FakeClient([FakeResponse(make_result(WRONG, "mix")) for _ in range(2)])
     _, reports = deobfuscate_text(S1, AgentConfig(cache_dir=None, client=client, max_rounds=2))
-    assert len(reports[0].attempts) == 2
-    assert reports[0].verification.status == "mismatch"           # yolg'on "muvaffaqiyat" yo'q
+    r = reports[0]
+    assert [a.round for a in r.attempts] == [1, 2, 3]            # 2 ta Claude + 1 ta offline urinish
+    assert r.engine == "offline" and r.verification.status == "verified"
+    assert "offline natija ishlatildi" in r.error
+
+
+@needs_cc
+def test_failed_claude_answers_are_forgotten_from_cache(tmp_path):
+    client = FakeClient([FakeResponse(make_result(WRONG, "mix")) for _ in range(2)])
+    deobfuscate_text(S1, AgentConfig(cache_dir=str(tmp_path), client=client, max_rounds=2))
+    assert not list(tmp_path.glob("*.json"))                      # noto'g'ri javoblar qayta urinishda $0 ga "qaytmaydi"
 
 
 @needs_cc
@@ -54,7 +64,7 @@ def test_llm_error_falls_back_to_offline():
     client = FakeClient([FakeResponse(None, stop_reason="refusal")])
     _, reports = deobfuscate_text(S1, AgentConfig(cache_dir=None, client=client))
     r = reports[0]
-    assert r.engine == "offline" and "bosh tortdi" in r.error
+    assert r.engine == "offline" and "xavfsizlik qoidalari" in r.error
     assert r.verification.status == "verified"
 
 
@@ -70,3 +80,15 @@ def test_offline_all_samples_verified():
 def test_unknown_function_name():
     with pytest.raises(ValueError, match="topilmadi"):
         deobfuscate_text(S1, AgentConfig(offline=True), function="yoq_funksiya")
+
+
+@needs_cc
+def test_verifier_rejects_changed_signature_types():
+    from deobf_agent import parser, verifier
+
+    parsed = parser.parse("int f(int x) { return x * 3; }")
+    func = parsed.functions[0]
+    assert verifier.verify(parsed, func, "short f(int x) { return x * 3; }").status == "compile_error"
+    assert verifier.verify(parsed, func, "void f(int x) { }").status == "compile_error"
+    assert verifier.verify(parsed, func, "int f(short x) { return x * 3; }").status == "compile_error"
+    assert verifier.verify(parsed, func, "int32_t f(int32_t x) { return x * 3; }").status == "verified"

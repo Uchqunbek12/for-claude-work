@@ -23,7 +23,7 @@ from dataclasses import dataclass
 _TOKEN_RE = re.compile(r"""
     (?P<num>0[xX][0-9A-Fa-f]+(?:[uUlL]|i64|i32|i16|i8)*|\d+(?:[uUlL]|i64|i32|i16|i8)*)
   | (?P<name>[A-Za-z_]\w*)
-  | (?P<op>->|<<=|>>=|<<|>>|<=|>=|==|!=|&&|\|\||[-+*/%&|^~!<>?:()=\[\],.])
+  | (?P<op>->|\+\+|--|<<=|>>=|<<|>>|<=|>=|==|!=|&&|\|\||[-+*/%&|^~!<>?:()=\[\],.])
   | (?P<ws>\s+)
 """, re.VERBOSE)
 
@@ -40,6 +40,21 @@ _TYPE_BITS = {
     "bool": (8, False), "_Bool": (8, False), "BYTE": (8, False), "WORD": (16, False), "DWORD": (32, False),
 }
 _TYPE_WORDS = set(_TYPE_BITS) | {"unsigned", "signed", "const", "volatile"}
+
+
+# C butun son literali (o'nlik, o'n oltilik, sakkizlik; IDA qo'shimchalari bilan). 0.05 kabi kasr sonning bo'laklari kirmaydi.
+C_INT_RE = re.compile(r"(?<![\w.])(0[xX][0-9A-Fa-f]+|\d+)(?:ui64|i64|ui32|i32|[uUlL]*)(?![\w.])")
+
+
+def c_int(text: str) -> int | None:
+    """'0x1F' -> 31, '0755' -> 493, '42' -> 42; tanib bo'lmasa (masalan '089') None."""
+    t = text.lower()
+    try:
+        if t.startswith("0x"):
+            return int(t, 16)
+        return int(t, 8) if len(t) > 1 and t.startswith("0") else int(t, 10)
+    except ValueError:
+        return None
 
 
 class ExprError(Exception):
@@ -260,7 +275,10 @@ def _literal(text: str):
 
 def parse(src: str):
     """C ifoda matnini AST daraxtiga aylantiradi."""
-    return _Parser(tokenize(src)).parse()
+    try:
+        return _Parser(tokenize(src)).parse()
+    except RecursionError:
+        raise ExprError("ifoda juda chuqur ichma-ich") from None
 
 
 # ---------------------------------------------------------------- hisoblash
@@ -426,7 +444,10 @@ def to_c(node, parent_prec: int = 0) -> str:
     if kind == "cast":
         return f"({'unsigned ' if not node[2] else ''}{_CAST_NAMES[node[1]]}){to_c(node[3], 11)}"
     if kind == "un":
-        return f"{node[1]}{to_c(node[2], 11)}"
+        inner = to_c(node[2], 11)
+        if node[1] in "+-&" and inner.startswith(node[1]):       # -(-c) "--c" bo'lib ketmasin
+            inner = f"({inner})"
+        return f"{node[1]}{inner}"
     if kind == "cond":
         s = f"{to_c(node[1], 1)} ? {to_c(node[2])} : {to_c(node[3])}"
         return f"({s})" if parent_prec > 0 else s
@@ -487,33 +508,71 @@ def random_inputs(names: list[str], n: int, seed: int = 1, types: Types | None =
         yield env, sample_types
 
 
+def has_side_effects(node) -> bool:
+    """Chaqiruv (f(x)) yoki boshqa yon ta'sirli bo'lak bormi? Bunday ifodani "sof qiymat" deb bo'lmaydi:
+    ikki marta chaqirish bir xil natija bermasligi mumkin, o'chirilsa chaqiruvning o'zi yo'qoladi."""
+    return any(n[0] == "var" and ("(" in n[1] or "++" in n[1] or "--" in n[1]) for n in subnodes(node))
+
+
+def _narrow_equalities(node) -> list:
+    """`X == literal` / `X != literal` shaklidagi bo'laklar (X — o'zgaruvchiga bog'liq ifoda)."""
+    return [n for n in subnodes(node)
+            if n[0] == "bin" and n[1] in ("==", "!=") and ((n[2][0] == "num") != (n[3][0] == "num"))
+            and not (n[2][0] == "num" and n[3][0] == "num")]
+
+
 def is_constant(node, n: int = 2000, types: Types | None = None) -> int | None:
-    """Ifoda barcha sinovlarda bir xil qiymat bersa — o'sha qiymatni, aks holda None qaytaradi."""
+    """Ifoda barcha sinovlarda bir xil qiymat bersa — o'sha qiymatni, aks holda None qaytaradi.
+
+    Muhim ehtiyot: tasodifiy sinov faqat "ko'p uchraydigan" qiymatlarni topadi. `a == 1337` kabi shart deyarli har
+    doim yolg'on, lekin ma'lumotga bog'liq — uni "soxta shart" deb o'chirsak, haqiqiy mantiq yo'qoladi. Soxta shartlarda
+    (masalan, `(x*(x+1)) % 2 == 0`) taqqoslanayotgan qiymat KAM turli qiymat oladi; ma'lumotga bog'liq shartlarda esa
+    ko'p. Shuning uchun `X == literal` bo'lagida X 16 tadan ko'p turli qiymat olsa, ifoda "doimiy" deb hisoblanmaydi.
+    """
+    if has_side_effects(node):
+        return None
+    watch = [(side, set()) for eq in _narrow_equalities(node) for side in (eq[3] if eq[2][0] == "num" else eq[2],)]
     seen = None
     for env, st in random_inputs(variables(node), n, types=types, consts=constants(node)):
         try:
             v = evaluate(node, env, st)[0]
-        except ExprError:
+            for side, values in watch:
+                if len(values) <= 16:
+                    values.add(evaluate(side, env, st)[0])
+        except (ExprError, RecursionError):
             continue
         if seen is None:
             seen = v
         elif v != seen:
             return None
+    if any(len(values) > 16 for _, values in watch):
+        return None
     return seen
 
 
+def _call_counts(node) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for sub in subnodes(node):
+        if sub[0] == "var" and ("(" in sub[1] or "++" in sub[1] or "--" in sub[1]):
+            counts[sub[1]] = counts.get(sub[1], 0) + 1
+    return counts
+
+
 def equivalent(a, b, n: int = 2000, types: Types | None = None) -> bool:
-    """Ikki ifoda tasodifiy sinovlarda bir xil natija beradimi?"""
+    """Ikki ifoda tasodifiy sinovlarda bir xil natija beradimi? (natija turi: razryad va ishora ham mos kelishi shart)"""
+    if _call_counts(a) != _call_counts(b):             # chaqiruvlar soni o'zgarsa, ma'no o'zgaradi
+        return False
     names = list(dict.fromkeys(variables(a) + variables(b)))
     checked = 0
     for env, st in random_inputs(names, n, seed=7, types=types, consts=constants(a) + constants(b)):
         try:
-            va, abits, _ = evaluate(a, env, st)
-            vb, bbits, _ = evaluate(b, env, st)
-        except ExprError:
+            va, abits, asg = evaluate(a, env, st)
+            vb, bbits, bsg = evaluate(b, env, st)
+        except (ExprError, RecursionError):
             continue
-        mask = (1 << max(abits, bbits)) - 1
+        if (abits, asg) != (bbits, bsg):
+            return False
         checked += 1
-        if va & mask != vb & mask:
+        if va & ((1 << abits) - 1) != vb & ((1 << abits) - 1):
             return False
     return checked > n // 2

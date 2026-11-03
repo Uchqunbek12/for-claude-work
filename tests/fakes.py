@@ -34,10 +34,12 @@ class FakeResponse:
     stop_reason: str = "end_turn"
     stop_details: object = None
     usage: FakeUsage = field(default_factory=FakeUsage)
+    raw_text: str | None = None            # parsed_output o'rniga to'g'ridan-to'g'ri matn (kesilgan/yaroqsiz JSON uchun)
 
     @property
     def content(self):
-        text = self.parsed_output.model_dump_json() if self.parsed_output else ""
+        text = self.raw_text if self.raw_text is not None else (
+            self.parsed_output.model_dump_json() if self.parsed_output else "")
         return [FakeBlock("thinking", signature="sig"), FakeBlock("text", text=text)]
 
 
@@ -46,7 +48,7 @@ class FakeMessages:
         self.responses = list(responses)
         self.calls = []
 
-    def parse(self, **kwargs):
+    def create(self, **kwargs):
         # messages ro'yxatining nusxasini saqlaymiz (keyin u o'zgaradi)
         self.calls.append({**kwargs, "messages": [dict(m) for m in kwargs["messages"]]})
         return self.responses.pop(0)

@@ -97,7 +97,7 @@ kompilyator va testlar bilan **tekshiradi**. Aynan shu narsa uni oddiy "chatbot"
  │ Detektorlar  │      flattening, XOR-satrlar, o'lik kodni topadi → "maslahatlar"
  └──────┬───────┘
         ▼
- ┌──────────────┐   4. Claude (default: Haiku 5.5 — arzon; --model sonnet/opus):
+ ┌──────────────┐   4. Claude (default: Sonnet 5.5; --model haiku/opus):
  │ LLM agent    │      soddalashtirilgan C kod + har blokka o'zbekcha izoh
  └──────┬───────┘
         ▼
@@ -115,7 +115,7 @@ kompilyator va testlar bilan **tekshiradi**. Aynan shu narsa uni oddiy "chatbot"
 ## 3. Qayerdan boshlaymiz → qayerga yetamiz
 
 **Boshlang'ich nuqta (hozir):** bo'sh repozitoriy; sizda IDA Free bor; Claude API
-ishlatishga qaror qildik (arzon bo'lishi uchun default — Haiku 5.5).
+ishlatishga qaror qildik (default — Sonnet 5.5: kuchli va o'rtacha narxda; arzonroq uchun Haiku 5.5).
 
 **Yakuniy nuqta (amaliy qism oxirida):** ishlaydigan, sinovdan o'tgan, hujjatlashtirilgan
 vosita va uni himoyada namoyish qilish uchun hamma narsa.
@@ -138,14 +138,14 @@ vosita va uni himoyada namoyish qilish uchun hamma narsa.
 1. **`deobf-agent` dasturi** (Python) — CLI va Web UI bilan.
 2. **3 xil kirish manbasi**: IDA Free'dan nusxalangan matn, Ghidra eksport skripti, oddiy `.c` fayl.
 3. **Bepul offline rejim** — API kalitsiz ham statik tahlil va namoyish ishlaydi.
-4. **Model tanlash bir zumda**: `--model haiku` (arzon, default) / `sonnet` / `opus`; Web UI'da ro'yxatdan tanlanadi.
+4. **Model tanlash bir zumda**: `--model sonnet` (default) / `haiku` (arzon) / `opus`; Web UI'da ro'yxatdan tanlanadi.
 5. **Narx hisoblagich** — har tahlil necha token va necha dollar turganini ko'rsatadi; **kesh** — bir xil kodni qayta tahlil qilish $0.
 6. **Test namunalari** va **avtomatik testlar**.
 7. **Hujjatlar o'zbek tilida**: har qadam nima uchun qilingani (jurnal), foydalanish yo'riqnomasi (IDA Free va Ghidra bilan qadam-baqadam), amaliy qism hisoboti.
 
 ### Narx haqida (talaba uchun)
-1 ta funksiya tahlili taxminan: **Haiku 5.5 ≈ $0.0013**, Sonnet 5.5 ≈ $0.026, Opus 5.5 ≈ $0.052.
-Ya'ni $5 kredit bilan Haiku'da **minglab** funksiyani tahlil qilish mumkin.
+1 ta funksiya tahlili taxminan (o'lchanmagan baho): **Sonnet 5.5 ≈ $0.03–0.07**, Haiku 5.5 ≈ $0.002–0.005, Opus 5.5 ≈ $0.06–0.15.
+Ya'ni $5 kredit bilan Sonnet'da **yuzlab**, Haiku'da **minglab** funksiyani tahlil qilish mumkin.
 API kalitni <https://console.anthropic.com> saytidan olasiz (buni foydalanish yo'riqnomasida batafsil yozaman).
 
 ### Chegaralar (halol aytib o'tamiz)

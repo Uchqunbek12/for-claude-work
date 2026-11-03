@@ -19,5 +19,5 @@ if "%KEY%"=="" (
 echo.
 echo .env fayli yaratildi. Endi kalit Claude serverida tekshiriladi (bepul)...
 echo.
-".venv\Scripts\python.exe" -m deobf_agent check -m haiku
+".venv\Scripts\python.exe" -m deobf_agent check -m sonnet
 pause

@@ -21,4 +21,4 @@ deobf = "deobf_agent.cli:main"
 include = ["deobf_agent*"]
 
 [tool.setuptools.package-data]
-deobf_agent = ["data/*.h", "web/templates/*.html"]
+deobf_agent = ["data/*.h", "web/templates/*.html", "web/static/*"]

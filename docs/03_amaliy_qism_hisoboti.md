@@ -58,7 +58,7 @@ o'zbek tilida tushuntiradigan va natijaning to'g'riligini **avtomatik tekshiradi
 - Statik tahlil topilmalari **tasodifiy test bilan isbotlanadi** va LLM'ga "tasdiqlangan fakt"
   sifatida beriladi. Bu modelning ishini osonlashtiradi va narxni kamaytiradi.
 - Flattening holatlar mashinasini graf tahlili orqali **LLM'siz** yechish algoritmi ishlab chiqildi.
-- Talaba va kichik jamoalar uchun **arzon**: standart model Haiku 5.5 (~$0.001/funksiya), bepul offline rejim.
+- Talaba va kichik jamoalar uchun **arzon**: standart model Sonnet 5.5 (taxminan $0.03–0.07/funksiya), arzonroq Haiku 5.5 va bepul offline rejim.
 
 ---
 
@@ -72,14 +72,14 @@ o'zbek tilida tushuntiradigan va natijaning to'g'riligini **avtomatik tekshiradi
 | T3 | C tilidagi ekvivalentni yaratish | ✅ kompilyatsiya qilinadigan C kod |
 | T4 | Har bir blokni inson tilida tushuntirish | ✅ bloklar bo'yicha o'zbekcha izoh (ru/en ham) |
 | T5 | Natijaning to'g'riligini tekshirish | ✅ gcc + differensial test + o'z-o'zini tuzatish |
-| T6 | Arzonlik | ✅ Haiku standart, kesh, offline rejim, narx hisoblagich |
+| T6 | Arzonlik | ✅ Haiku/Sonnet/Opus tanlash, kesh, bepul offline rejim, narx hisoblagich |
 | T7 | Qulay interfeys | ✅ CLI + Web UI |
 
 ### 2.2. Texnologiyalar
 | Texnologiya | Tanlash sababi |
 |---|---|
 | Python 3.10+ | o'rganish oson, Claude'ning rasmiy SDK'si, matn bilan ishlash qulay |
-| Anthropic Claude API (`anthropic` SDK) | structured outputs, prompt caching, model tanlash (Haiku/Sonnet/Opus) |
+| Anthropic Claude API (`anthropic` SDK) | structured outputs, prompt caching, model tanlash (Sonnet standart; Haiku/Opus) |
 | pydantic | LLM javob sxemasini avtomatik tekshirish |
 | gcc | natijani kompilyatsiya qilish va differensial test |
 | Flask + Jinja2 | eng oddiy veb-freymvork; avtomatik HTML ekranlash (XSS himoyasi) |
@@ -119,7 +119,7 @@ o'zbek tilida tushuntiradigan va natijaning to'g'riligini **avtomatik tekshiradi
             └──────────────────────────────────────────────────────────────┘
 ```
 
-Modullar (19 ta Python fayli, ~3400 qator kod; ~500 qator testlar):
+Modullar (23 ta Python fayli, ~6000 qator kod; ~1000 qator testlar):
 
 | Modul | Vazifasi |
 |---|---|
@@ -173,7 +173,7 @@ ketma-ketlikka, o'z tuguniga qaytuvchi shartli tarmoqlar `while` tsikliga, qolga
 o'zgartirish kiritmaydi va ish LLM'ga qoldiriladi.
 
 ### 4.5. LLM integratsiyasi
-- **Model:** standart `claude-haiku-5-5` ($0.10 / $0.50 har 1M token), `--model sonnet|opus` bilan almashtiriladi.
+- **Model:** standart `claude-sonnet-5-5` ($2 / $10 har 1M token), `--model haiku|opus` bilan almashtiriladi.
 - **Structured outputs:** javob `DeobfResult` sxemasida keladi (C kod, bloklar, qayta nomlashlar, xulosa, ishonch).
 - **Prompt:** o'zgarmas tizim ko'rsatmasi (prompt keshlanadi) + raqamlangan psevdokod + global ma'lumotlar
   + **isbotlangan statik faktlar** + holatlar xaritasi + tushuntirish tili.
@@ -236,7 +236,7 @@ Obfuskatsiyalangan versiya `gcc -O0` bilan kompilyatsiya qilinib, **angr** dekom
 Ishlab chiqish muhitida Claude API kaliti bo'lmagani sababli LLM rejimi **mazkur hisobot yozilgan vaqtda
 o'lchanmagan**. Agent siklining mantiqi (xatoni aniqlash → qarshi misollar bilan qayta so'rash → tuzatish)
 soxta mijoz yordamida avtomatik testlar bilan tekshirilgan. Haqiqiy o'lchash buyrug'i:
-`deobf eval --model haiku -o docs/baholash_haiku.md` (5 namuna uchun taxminiy narx ≈ $0.01).
+`deobf eval --model sonnet -o docs/baholash_sonnet.md` (8 namuna uchun taxminiy narx $0.3–0.6; hali o'lchanmagan).
 Natijalar olingach, shu bo'limga qo'shiladi.
 
 ### 5.5. Muhim kuzatuvlar
@@ -253,19 +253,20 @@ Natijalar olingach, shu bo'limga qo'shiladi.
    berish va kodni tabiiy tilda tushuntirish uchun LLM kerak.
 
 ### 5.6. Avtomatik testlar
-40 ta test (pytest): parser (5), differensial test (4), detektorlar (8), Claude moduli (5), agent sikli (6),
-Web UI va hisobot (5), unflatten (7). Natija: **40/40 o'tdi**.
+101 ta test (pytest): parser, differensial test (shu jumladan audit topgan yolg'on-ekvivalent holatlar),
+detektorlar, unflatten, Claude moduli (soxta mijoz bilan), agent sikli, tushuntiruvchi modul (narrate), Web UI va
+public rejim xavfsizligi, audit regressiyalari. Natija: **101/101 o'tdi**.
 
 ---
 
 ## 6. Cheklovlar va keyingi ishlar
 | Cheklov | Mumkin bo'lgan yechim |
 |---|---|
-| Differensial test faqat butun sonli parametrli funksiyalar uchun | ko'rsatkichli funksiyalar uchun xotira modelini yaratish yoki simvolik bajarish (angr) |
+| Differensial test: NULL/ustma-ust tushgan ko'rsatkichlar, matn chiqishi, `x == (1<<20)` kabi hosila konstantalar sinalmaydi | SMT-yechuvchi yoki simvolik bajarish (angr) |
 | Tasodifiy test — isbot emas | SMT-yechuvchi (Z3) bilan formal ekvivalentlik isboti |
 | Unflatten faqat oddiy holatlar mashinasi uchun | dominatorlar daraxtiga asoslangan to'liq tuzilma tiklash algoritmi |
 | Virtualizatsiya (VMProtect) qo'llab-quvvatlanmaydi | loyiha doirasidan tashqarida |
-| LLM rejimi hali o'lchanmagan | API kalit bilan `deobf eval` |
+| LLM rejimi (Sonnet 5.5) haqiqiy API bilan hali o'lchanmagan: sifat va narx taxminiy | API kalit bilan `deobf eval --model sonnet` |
 | IDA/Ghidra eksport skriptlari sinab ko'rilmagan | IDA/Ghidra o'rnatilgan kompyuterda sinash |
 | Psevdokod funksiyalararo tahlil qilinmaydi | chaqiruv grafi bo'yicha ketma-ket tahlil |
 
@@ -281,7 +282,7 @@ yo'naltiriladi. Shu tufayli vosita oddiy chatbot emas, balki **o'z natijasini te
 Test namunalarida LLM'siz offline rejim ham barcha usullarni aniqladi (100%), 5/5 natijaning psevdokodga
 ekvivalentligini isbotladi va tsiklomatik murakkablikni 54% ga kamaytirdi. Ish davomida dekompilyatorning
 o'zi ham xato qilishi mumkinligi aniqlandi va tekshiruv bunday holatlarni ochib berdi. Vosita talabalar uchun
-arzon: standart Haiku modeli bilan bitta funksiya tahlili taxminan $0.001 turadi, takroriy tahlil esa bepul.
+arzon: standart Sonnet modeli bilan bitta funksiya tahlili taxminan $0.03–0.07 turadi (Haiku bilan ~20 baravar arzon), takroriy tahlil esa bepul.
 
 ---
 

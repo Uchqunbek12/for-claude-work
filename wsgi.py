@@ -7,8 +7,10 @@ shunda server public rejimda ishlaydi: kalit saqlanmaydi, kirish hajmi va so'rov
 disk kesh o'chiriladi, xavfsizlik sarlavhalari qo'shiladi (deobf_agent/web/app.py).
 """
 
+from deobf_agent import sandbox
 from deobf_agent.llm import load_dotenv
 from deobf_agent.web.app import create_app
 
-load_dotenv()          # mahalliy sinovda .env bo'lsa o'qiydi (internetda odatda bo'lmaydi)
+if not sandbox.PUBLIC:
+    load_dotenv()      # mahalliy sinovda .env o'qiladi; public rejimda kalit fayldan hech qachon o'qilmaydi
 app = create_app()

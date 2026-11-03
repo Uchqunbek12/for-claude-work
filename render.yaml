@@ -9,3 +9,5 @@ services:
     envVars:
       - key: DEOBF_PUBLIC
         value: "1"
+      - key: DEOBF_TRUSTED_PROXIES      # Render bitta proksi orqasida: haqiqiy mijoz IP'si olinadi
+        value: "1"

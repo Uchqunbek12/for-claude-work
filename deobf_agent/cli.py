@@ -1,8 +1,8 @@
 """Buyruq qatori interfeysi (CLI).
 
 Misollar:
-  deobf analyze samples/decompiled/s3_flatten.angr.c              # Claude Haiku (standart)
-  deobf analyze kod.c --model sonnet                              # kuchliroq model
+  deobf analyze samples/decompiled/s3_flatten.angr.c              # Claude Sonnet 5.5 (standart)
+  deobf analyze kod.c --model haiku                               # arzonroq model (yoki --model opus — kuchliroq)
   deobf analyze kod.c --offline                                   # bepul, LLM'siz
   deobf analyze kod.c -f sub_401136 --format html -o hisobot.html # bitta funksiya, HTML hisobot
   deobf functions kod.c                                           # fayldagi funksiyalar ro'yxati
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import __version__, parser, report
 from .agent import AgentConfig, deobfuscate_text
-from .llm import DEFAULT_MODEL, EFFORTS, LANGUAGES, MODEL_ALIASES, load_dotenv
+from .llm import DEFAULT_MODEL, EFFORTS, LANGUAGES, MODEL_ALIASES, load_dotenv, resolve_model
 
 _DEFAULTS = AgentConfig()     # standart qiymatlar manbai (takrorlamaslik uchun)
 
@@ -123,12 +123,12 @@ def cmd_check(args) -> int:
         for m in models:
             ok, msg = llm.check_api_key(m)
             line(ok, f"Model '{m}'", msg)
-            ok_all &= ok or m != (args.model or DEFAULT_MODEL)
+            ok_all &= ok or resolve_model(m) != resolve_model(args.model)
 
     cc = compiler.find_compiler()
     line(True if cc else None, "C kompilyatori (gcc/clang)",
          cc or "topilmadi — vosita ishlaydi, lekin natijalar tekshirilmaydi (⚪). docs/02_foydalanish.md, 1-bo'lim")
-    print("\nStandart model:", llm.resolve_model(None), "(o'zgartirish: --model sonnet yoki .env da DEOBF_MODEL=sonnet)")
+    print("\nStandart model:", llm.resolve_model(None), "(o'zgartirish: --model haiku yoki .env da DEOBF_MODEL=haiku)")
     print("\nNATIJA:", "hammasi tayyor ✅" if ok_all else "yuqoridagi ❌ belgili qatorlarni tuzating")
     return 0 if ok_all else 1
 
@@ -210,7 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
     w.set_defaults(func=cmd_web)
 
     c = sub.add_parser("check", help="diagnostika: o'rnatish, .env, API kalit, gcc")
-    c.add_argument("-m", "--model", help="faqat shu modelni tekshirish (masalan, haiku)")
+    c.add_argument("-m", "--model", help="faqat shu modelni tekshirish (masalan, sonnet)")
     c.add_argument("--no-network", action="store_true", help="Claude serveriga ulanmasdan tekshirish")
     c.set_defaults(func=cmd_check)
 

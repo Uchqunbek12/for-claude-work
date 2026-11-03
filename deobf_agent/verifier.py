@@ -11,7 +11,7 @@ Holatlar (status):
                    (masalan, funksiya ko'rsatkich qabul qiladi yoki tashqi funksiya chaqiradi)
   mismatch       — testlarda farq topildi (natija NOTO'G'RI)
   compile_error  — kod kompilyatsiya bo'lmadi
-  no_compiler    — tizimda gcc/clang yo'q, tekshirib bo'lmadi
+  no_compiler    — tizimda gcc/clang yo'q yoki public demo (kod ishga tushirilmaydi), tekshirib bo'lmadi
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from . import compiler, harness, parser
+from . import compiler, expr, harness, parser, sandbox
 from .models import FunctionInfo, ParsedInput
 
 STATUS_UZ = {
@@ -28,7 +28,7 @@ STATUS_UZ = {
     "compiled": "Kompilyatsiya bo'ldi, lekin natijalar avtomatik solishtirilmadi",
     "mismatch": "Farq bor: asl kod boshqa natija beradi",
     "compile_error": "Kompilyatsiya xatosi",
-    "no_compiler": "Tekshirilmadi: gcc topilmadi",
+    "no_compiler": "Tekshirilmadi: kod ishga tushirilmadi",
 }
 STATUS_RANK = {"verified": 4, "compiled": 3, "no_compiler": 2, "mismatch": 1, "compile_error": 0}
 
@@ -74,8 +74,39 @@ def original_unit(parsed: ParsedInput, func: FunctionInfo) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
+def _type_problem(orig: str, cand: str, what: str) -> str:
+    """Nomzod turi asl turdan prinsipial farq qilsa (void/qiymat, ko'rsatkich/son, razryad kengligi) — sabab matni.
+
+    Test dasturi ikkala funksiyani asl prototip orqali chaqiradi, shuning uchun torroq tur (masalan, `int` o'rniga
+    `short`) yoki `void` natijasi sezilmay qolardi. Noma'lum (typedef) turlar tekshirilmaydi.
+    """
+    a, b = parser.normalize_type(orig), parser.normalize_type(cand)
+    if a == b:
+        return ""
+    if (a == "void") != (b == "void"):
+        return f"{what} turi o'zgargan: {orig} -> {cand}"
+    if ("*" in a) != ("*" in b):
+        return f"{what} turi o'zgargan (ko'rsatkich/son): {orig} -> {cand}"
+    ia, ib = expr.type_info(a), expr.type_info(b)
+    if ia and ib and ia[0] != ib[0]:
+        return f"{what} turining kengligi o'zgargan: {orig} ({ia[0]} bit) -> {cand} ({ib[0]} bit)"
+    return ""
+
+
 def verify(parsed: ParsedInput, func: FunctionInfo, c_code: str, n_tests: int = 2000) -> VerifyReport:
+    try:
+        return _verify(parsed, func, c_code, n_tests)
+    except (OSError, UnicodeError) as exc:        # kompilyator topilmadi/fayl yozib bo'lmadi/yaroqsiz belgi — butun ish to'xtamasin
+        return VerifyReport("compile_error", details=f"Tekshiruvni bajarib bo'lmadi: {type(exc).__name__}: {exc}",
+                            problems=f"The verifier could not process the code ({type(exc).__name__}). "
+                                     "Make sure c_code contains only valid ASCII/UTF-8 C source.")
+
+
+def _verify(parsed: ParsedInput, func: FunctionInfo, c_code: str, n_tests: int) -> VerifyReport:
     if compiler.find_compiler() is None:
+        if not sandbox.native_allowed():
+            return VerifyReport("no_compiler", details="Public demoda xavfsizlik uchun foydalanuvchi kodi ishga tushirilmaydi. "
+                                                       "To'liq tekshiruv (gcc + test) uchun vositani o'z kompyuteringizda ishlating.")
         return VerifyReport("no_compiler", details="gcc yoki clang topilmadi — natija tekshirilmadi")
 
     # IDA/Ghidra global nomlari (dword_404010, DAT_...) e'lon qilinmagan bo'lsa, ularni avtomatik e'lon qilamiz —
@@ -97,6 +128,13 @@ def verify(parsed: ParsedInput, func: FunctionInfo, c_code: str, n_tests: int = 
                             details=f"Parametrlar soni o'zgargan: {len(func.params)} -> {len(cand.params)}",
                             problems=f"The parameter list changed ({len(func.params)} -> {len(cand.params)} params). "
                                      f"Keep exactly: ({', '.join(f'{p.type} {p.name}' for p in func.params)}).")
+
+    changes = [t for t in [_type_problem(func.ret_type, cand.ret_type, "Qaytish")] +
+               [_type_problem(a.type, b.type, f"{i + 1}-parametr") for i, (a, b) in enumerate(zip(func.params, cand.params))] if t]
+    if changes:
+        return VerifyReport("compile_error", details="; ".join(changes),
+                            problems="Function signature mismatch: " + "; ".join(changes) +
+                                     ". Keep the original return type and parameter types exactly.")
 
     intptr = harness.pointer_like_params(func.text, [(p.type, p.name) for p in func.params])
     diff = harness.differential_test(original_unit(parsed, func), func.name, c_code, func.name,

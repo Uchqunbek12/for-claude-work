@@ -44,7 +44,9 @@ NO_COMPILER = "C kompilyatori topilmadi (gcc yoki clang o'rnating)"
 
 
 def find_compiler() -> str | None:
-    """Tizimdagi C kompilyatorini topadi (DEOBF_CC muhit o'zgaruvchisi ustun)."""
+    """Tizimdagi C kompilyatorini topadi (DEOBF_CC muhit o'zgaruvchisi ustun). Public rejimda — None."""
+    if not sandbox.native_allowed():
+        return None
     env = os.environ.get("DEOBF_CC")
     if env:
         return env

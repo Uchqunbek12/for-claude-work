@@ -1,5 +1,5 @@
 {# Natijalar qismi: Web UI va saqlanadigan HTML hisobotda bir xil ishlatiladi. Hech qayerda |safe yo'q —
-   foydalanuvchi va model matni doim ekranlanadi. #}
+   foydalanuvchi va model matni doim ekranlanadi. Skript yo'q: almashtirgich static/report.js da. #}
 {% set short = {"verified": "Tasdiqlandi", "compiled": "Kompilyatsiya bo'ldi", "mismatch": "Farq bor",
                 "compile_error": "Kompilyatsiya xatosi", "no_compiler": "Tekshirilmadi"} %}
 <p class="meta">Manba: {{ style_names.get(data.style, data.style) }} · {{ data.functions|length }} ta funksiya
@@ -13,47 +13,40 @@
 </div>
 {% for f in data.functions %}
 <article>
-<h2><code>{{ f.function }}</code>{% if f.suggested_name and f.suggested_name != f.function %} → <code>{{ f.suggested_name }}</code>{% endif %}</h2>
+<h2 class="fn"><code>{{ f.function }}</code>{% if f.suggested_name and f.suggested_name != f.function %} <span class="arrow">→</span> <code>{{ f.suggested_name }}</code>{% endif %}</h2>
 <p class="status status-{{ f.verification.status }}"><b>{{ short.get(f.verification.status, f.verification.status) }}.</b>
   <span>{{ f.verification.details.split("\n")[0] }}</span></p>
-{% if f.error %}<p class="error">Claude javob bermadi: {{ f.error }} Pastdagi natija offline tahlildan.</p>{% endif %}
+{% if f.error %}<p class="error">{{ f.error }}</p>{% endif %}
 <p class="meta">{{ f.engine }} · qatorlar {{ f.metrics_before.lines }} → {{ f.metrics_after.lines }} ·
 <abbr title="if, while, case va boshqa tarmoqlanishlar soni + 1">murakkablik</abbr> {{ f.metrics_before.cyclomatic }} → {{ f.metrics_after.cyclomatic }}
 {%- if f.engine != "offline" %} · ishonch: {{ confidence_uz.get(f.result.confidence, f.result.confidence) }} · ${{ "%.4f"|format(f.usage.cost_usd) }}{% if f.usage.cache_hits %} (keshdan){% endif %}{% endif %} · {{ f.elapsed_sec }} s</p>
-<p class="expert">{{ f.result.summary }}</p>
-<p class="simple">{{ f.result.simple_summary or f.result.summary }}</p>
-{% if f.result.techniques %}<p class="muted">Topilgan usullar: {% for t in f.result.techniques %}{{ tech_names.get(t, t) }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+<p class="lead expert">{{ f.result.summary|rich }}</p>
+<p class="lead simple">{{ f.result.simple_summary or f.result.summary }}</p>
+{% if f.result.techniques %}<p class="muted expert">Topilgan chalkashtirish usullari: {% for t in f.result.techniques %}{{ tech_names.get(t, t) }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
 <div class="panes">
   <div><h3>Asl kod</h3><div class="src"><pre class="ln" aria-hidden="true">{% for _ in f.original_code.splitlines() %}{{ loop.index }}
 {% endfor %}</pre><pre><code class="language-c">{{ f.original_code }}</code></pre></div></div>
-  <div class="after"><h3>Soddalashtirilgan</h3><pre><code class="language-c">{{ f.display_code }}</code></pre></div>
+  <div class="after"><h3>Soddalashtirilgan</h3><div class="src"><pre class="ln" aria-hidden="true">{% for _ in f.display_code.splitlines() %}{{ loop.index }}
+{% endfor %}</pre><pre><code class="language-c">{{ f.display_code }}</code></pre></div></div>
 </div>
-{% if f.result.blocks %}<h3>Tushuntirish</h3>
-<ol class="blocks">{% for b in f.result.blocks %}<li><b>{{ b.title }}</b> <span class="muted">· {{ b.original_lines }}-qator</span>
-<pre>{% if b.simplified_code %}{% for l in b.original_code.splitlines() %}<span class="del">- {{ l.strip() }}</span>
+{% if f.result.blocks %}<h3>Qadam-baqadam tushuntirish</h3>
+<ol class="blocks">{% for b in f.result.blocks %}<li>
+<div class="b-head"><b>{{ b.title }}</b>{% if b.original_lines %} <span class="muted b-where">· asl koddagi {{ b.original_lines }}-qator{% if "-" in b.original_lines or "," in b.original_lines %}lar{% endif %}</span>{% endif %}</div>
+<p class="expl expert">{{ b.explanation|rich }}</p>
+<p class="expl simple">{{ b.simple or b.explanation }}</p>
+{% if b.original_code.strip() or b.simplified_code.strip() %}<details class="code-diff"><summary>Kod: oldin va keyin</summary>
+<pre>{% if b.simplified_code.strip() and b.simplified_code.strip() != b.original_code.strip() %}{% for l in b.original_code.splitlines() %}<span class="del">- {{ l.strip() }}</span>
 {% endfor %}{% for l in b.simplified_code.splitlines() %}<span class="add">+ {{ l.strip() }}</span>
-{% endfor %}{% else %}{{ b.original_code }}{% endif %}</pre>
-<p class="expl expert">{{ b.explanation }}</p>
-<p class="expl simple">{{ b.simple or b.explanation }}</p></li>{% endfor %}</ol>{% endif %}
-{% if f.result.renames %}<h3>Yangi nomlar</h3><div class="wrap"><table><tr><th>Eski</th><th>Yangi</th><th>Nega</th></tr>
+{% endfor %}{% else %}{{ b.original_code }}{% endif %}</pre></details>{% endif %}
+</li>{% endfor %}</ol>{% endif %}
+{% if f.result.renames %}<h3 class="expert">Yangi nomlar</h3><div class="wrap expert"><table><tr><th>Eski</th><th>Yangi</th><th>Nega</th></tr>
 {% for r in f.result.renames %}<tr><td><code>{{ r.old }}</code></td><td><code>{{ r.new }}</code></td><td>{{ r.reason }}</td></tr>{% endfor %}</table></div>{% endif %}
-{% if f.result.notes %}<p class="muted">Eslatma: {{ f.result.notes }}</p>{% endif %}
-{% if f.static_findings %}<details><summary>Statik tahlil — {{ f.static_findings|length }} ta topilma</summary>
-<ul class="plain">{% for x in f.static_findings %}<li>{{ x.line }}-qator, {{ tech_names.get(x.technique, x.technique) }}{% if x.verified %} <span class="add">(test bilan tasdiqlangan)</span>{% endif %}: {{ x.message.split("\n")[0] }}</li>{% endfor %}</ul>
-{% for sm in f.state_machines %}<pre>{{ sm }}</pre>{% endfor %}</details>{% endif %}
+{% if f.result.notes %}<p class="muted">Eslatma: {{ f.result.notes|rich }}</p>{% endif %}
+{% if f.static_findings or f.tool_note %}<details class="expert"><summary>Statik tahlil — {{ f.static_findings|length }} ta topilma</summary>
+<ul class="plain">{% for x in f.static_findings %}<li>{{ x.line }}-qator, {{ tech_names.get(x.technique, x.technique) }}{% if x.verified %} <span class="add">(tasodifiy test bilan tasdiqlangan)</span>{% endif %}: {{ x.message.split("\n")[0]|rich }}</li>{% endfor %}</ul>
+{% for sm in f.state_machines %}<pre>{{ sm }}</pre>{% endfor %}
+{% if f.tool_note %}<pre>{{ f.tool_note }}</pre>{% endif %}</details>{% endif %}
 <details><summary>Tekshiruv tarixi — {{ f.attempts|length }} ta urinish</summary>
 <ul class="plain">{% for a in f.attempts %}<li>{{ a.round }}. <span class="status-{{ a.status }}">{{ short.get(a.status, a.status)|lower }}</span> — {{ a.details.split("\n")[0] }}</li>{% endfor %}</ul></details>
 </article>
 {% endfor %}
-<script>
-  /* "Mutaxassis uchun" / "Oddiy tilda" almashtirgichi: faqat ko'rinish, server so'rovi yo'q */
-  document.querySelectorAll(".mode button").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var simple = btn.dataset.view === "simple";
-      document.body.classList.toggle("view-simple", simple);
-      document.querySelectorAll(".mode button").forEach(function (b) {
-        b.setAttribute("aria-pressed", String(b.dataset.view === btn.dataset.view));
-      });
-    });
-  });
-</script>

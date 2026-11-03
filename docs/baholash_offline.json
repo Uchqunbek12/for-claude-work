@@ -32,7 +32,7 @@
     "engine": "offline",
     "verification": "verified",
     "truth": "mismatch",
-    "truth_details": "826/5000 testda farq:",
+    "truth_details": "5/16 testda farq:",
     "recall": 1.0,
     "missed": [],
     "before": {
@@ -51,7 +51,7 @@
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.34,
+    "time": 0.37,
     "error": "",
     "suggested_name": "clamp"
   },
@@ -79,7 +79,7 @@
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.23,
+    "time": 0.27,
     "error": "",
     "suggested_name": "gcd"
   },
@@ -96,7 +96,7 @@
       "cyclomatic": 2
     },
     "after": {
-      "lines": 10,
+      "lines": 9,
       "cyclomatic": 2
     },
     "clean": {
@@ -107,7 +107,7 @@
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.22,
+    "time": 0.27,
     "error": "",
     "suggested_name": "greet_char"
   },
@@ -124,7 +124,7 @@
       "cyclomatic": 9
     },
     "after": {
-      "lines": 18,
+      "lines": 16,
       "cyclomatic": 2
     },
     "clean": {
@@ -135,7 +135,7 @@
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.4,
+    "time": 0.36,
     "error": "",
     "suggested_name": "checksum"
   },
@@ -144,7 +144,7 @@
     "engine": "offline",
     "verification": "verified",
     "truth": "equivalent",
-    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "truth_details": "4638 ta tasodifiy test — barchasi mos keldi (362 ta kirishda asl funksiyaning o'zi xato bilan to'xtadi yoki osilib qoldi (o'tkazildi))",
     "recall": 1.0,
     "missed": [],
     "before": {
@@ -163,7 +163,7 @@
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.39,
+    "time": 0.45,
     "error": "",
     "suggested_name": "xor_stream"
   },
@@ -172,7 +172,7 @@
     "engine": "offline",
     "verification": "verified",
     "truth": "mismatch",
-    "truth_details": "1609/5000 testda farq:",
+    "truth_details": "5/10 testda farq (7 ta kirishda asl funksiyaning o'zi xato bilan to'xtadi yoki osilib qoldi (o'tkazildi)):",
     "recall": 1.0,
     "missed": [],
     "before": {
@@ -180,7 +180,7 @@
       "cyclomatic": 8
     },
     "after": {
-      "lines": 11,
+      "lines": 9,
       "cyclomatic": 2
     },
     "clean": {
@@ -191,7 +191,7 @@
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 0.31,
+    "time": 0.44,
     "error": "",
     "suggested_name": "rot_hash"
   },
@@ -200,7 +200,7 @@
     "engine": "offline",
     "verification": "verified",
     "truth": "equivalent",
-    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "truth_details": "4603 ta tasodifiy test — barchasi mos keldi (397 ta kirishda asl funksiyaning o'zi xato bilan to'xtadi yoki osilib qoldi (o'tkazildi))",
     "recall": 1.0,
     "missed": [],
     "before": {
@@ -219,7 +219,7 @@
     "cost": 0.0,
     "tokens_in": 0,
     "tokens_out": 0,
-    "time": 1.42,
+    "time": 1.3,
     "error": "",
     "suggested_name": "bubble_sort"
   }

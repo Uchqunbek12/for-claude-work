@@ -34,7 +34,7 @@ Loyiha papkasida 4 ta `.bat` fayl bor. Ularni **tartib bilan, sichqoncha bilan i
 ### Kalit ishlayaptimi?
 `2_kalit_kiritish.bat` yoki `4_tekshirish.bat` oxirida shunday qator chiqadi:
 ```
-✅ Model 'haiku': Kalit ishlayapti ✅ — model mavjud: Claude Haiku 5.5 (claude-haiku-5-5)
+✅ Model 'sonnet': Kalit ishlayapti ✅ — model mavjud: Claude Sonnet 5.5 (claude-sonnet-5-5)
 ```
 Bu tekshiruv **bepul**, chunki Claude hech qanday matn yaratmaydi, server faqat kalitni tasdiqlaydi.
 Web UI'da ham shunday tekshiruv bor: **"Kalitni tekshirish"** tugmasi.
@@ -88,7 +88,7 @@ python -m pytest -q
 ## 3. Claude API kalitini olish (bir martalik)
 
 1. <https://console.anthropic.com> saytida ro'yxatdan o'ting.
-2. **Billing** bo'limida balansni to'ldiring (minimal summa yetarli: Haiku bilan 1 ta funksiya ≈ **$0.001**).
+2. **Billing** bo'limida balansni to'ldiring (minimal summa yetarli: Sonnet bilan 1 ta funksiya taxminan **$0.03–0.07**, ya'ni $5 ga ~100 ta funksiya; Haiku bilan ancha arzon).
 3. **API Keys → Create Key** — kalitni nusxalang (`sk-ant-...`). Kalit faqat bir marta ko'rsatiladi.
 4. **`2_kalit_kiritish.bat`** ni ishga tushiring va kalitni joylang. Fayl `.env` ni o'zi yaratadi
    va kalitni tekshiradi.
@@ -155,7 +155,7 @@ Sahifada:
 
 ```bat
 deobf functions gcd.ida.c                         :: fayldagi funksiyalar ro'yxati
-deobf analyze gcd.ida.c                           :: Claude Haiku bilan tahlil (standart)
+deobf analyze gcd.ida.c                           :: Claude Sonnet 5.5 bilan tahlil (standart)
 deobf analyze gcd.ida.c --model sonnet            :: kuchliroq model
 deobf analyze gcd.ida.c --model opus              :: eng kuchli model
 deobf analyze gcd.ida.c --offline                 :: bepul, LLM'siz
@@ -168,7 +168,7 @@ Foydali parametrlar:
 
 | Parametr | Ma'nosi | Standart |
 |---|---|---|
-| `--model` | `haiku` / `sonnet` / `opus` yoki to'liq model nomi | `haiku` |
+| `--model` | `sonnet` / `haiku` / `opus` yoki to'liq model nomi | `sonnet` |
 | `--effort` | o'ylash chuqurligi: `low` (arzon) / `medium` / `high` | `medium` |
 | `--max-rounds` | tekshiruvdan o'tmasa, necha marta tuzatish so'raladi | `3` |
 | `--tests` | differensial testlar soni | `2000` |
@@ -182,10 +182,14 @@ qaysi birini ishlatishni **tanlaysiz**:
 
 | Model | Qisqa nomi | Narx (1 funksiya) | Qachon ishlatish |
 |---|---|---|---|
-| Claude Haiku 5.5 | `haiku` | ~$0.001 | **standart** — ko'p holatlar uchun yetarli |
-| Claude Sonnet 5.5 | `sonnet` | ~$0.03 | Haiku natijasi ❌ yoki 🟡 bo'lsa |
-| Claude Opus 5.5 | `opus` | ~$0.05 | eng murakkab funksiyalar uchun |
-| Offline | `--offline` | $0 | API kalitsiz, faqat statik tahlil |
+| Claude Sonnet 5.5 | `sonnet` | taxminan $0.03–0.07 | **standart** — kuchli va o'rtacha narxda |
+| Claude Haiku 5.5 | `haiku` | taxminan $0.002–0.005 | arzonroq: oddiy funksiyalar, ko'p sinov uchun |
+| Claude Opus 5.5 | `opus` | taxminan $0.06–0.15 | eng murakkab funksiyalar uchun |
+| Offline | `--offline` | $0 | API kalitsiz: statik tahlil va qoidalarga asoslangan tushuntirish |
+
+> Narxlar **taxminiy va hali o'lchanmagan** (API kalit bilan haqiqiy sinov o'tkazilmagan): model "o'ylashi" ham
+> chiqish tokeni sifatida hisoblanadi, shuning uchun narx funksiya murakkabligiga va `--effort` ga bog'liq.
+> Aniq narx har bir hisobotda ko'rsatiladi.
 
 Tanlash usullari:
 - **Web UI:** "Model (dvigatel)" ro'yxatidan tanlang. Ro'yxatda bo'lmagan boshqa Claude modelini
@@ -202,13 +206,13 @@ Tanlash usullari:
 ### 5.4. Baholash (namunalar bo'yicha)
 ```bat
 deobf eval --offline -o docs\baholash_offline.md        :: bepul
-deobf eval --model haiku -o docs\baholash_haiku.md      :: Claude Haiku (5 namuna ≈ $0.01)
-deobf eval --model sonnet -o docs\baholash_sonnet.md    :: taqqoslash uchun
+deobf eval --model sonnet -o docs\baholash_sonnet.md    :: Claude Sonnet (8 namuna, taxminan $0.3–0.6)
+deobf eval --model haiku -o docs\baholash_haiku.md      :: arzon model bilan taqqoslash
 ```
 IDA psevdokodi bilan baholash: namunalarni (`samples/bin/*.elf`) IDA'da ochib, har birini
 `samples/decompiled/<id>.ida.c` nomi bilan saqlang (masalan, `s1_mba.ida.c`), so'ng:
 ```bat
-deobf eval --model haiku --source ida -o docs\baholash_haiku_ida.md
+deobf eval --model sonnet --source ida -o docs\baholash_sonnet_ida.md
 ```
 
 ### 5.5. Internetga chiqarish (demo rejimi)
@@ -233,7 +237,7 @@ To'liq yo'riqnoma (Render.com, Docker, xavfsizlik): **[docs/04_internetga_chiqar
 
 ## 7. Pul tejash bo'yicha maslahatlar
 1. Avval `--offline` bilan ko'ring — ko'p narsa bepul aniqlanadi.
-2. Standart **Haiku** modeli ko'p holatlar uchun yetarli. Faqat qiyin holatlarda `--model sonnet/opus` ishlating.
+2. Standart **Sonnet** yaxshi sifat beradi. Arzonroq kerak bo'lsa oddiy funksiyalar uchun `--model haiku`, qiyin holatlarda `--model opus`. Offline rejim bepul.
 3. `--effort low` — yanada arzon.
 4. Bir xil kodni qayta tahlil qilish **bepul** (disk kesh, `.deobf_cache/` papkasi).
 5. Butun dasturni emas, kerakli funksiyani tahlil qiling (`-f nomi`).

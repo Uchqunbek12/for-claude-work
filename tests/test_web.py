@@ -55,8 +55,9 @@ def public_app(monkeypatch):
 def test_public_mode_security_and_byok(public_app):
     c = public_app.test_client()
     r = c.get("/")
-    assert r.headers["X-Frame-Options"] == "DENY"
-    assert "cdnjs.cloudflare.com" in r.headers["Content-Security-Policy"]
+    assert r.headers["X-Frame-Options"] == "DENY" and r.headers["Referrer-Policy"] == "same-origin"
+    csp = r.headers["Content-Security-Policy"]
+    assert "script-src 'self'" in csp and "cdnjs" not in csp and "unsafe-inline'; img" in csp   # skriptlar faqat o'zimizdan
     assert 'name="api_key"' in r.get_data(as_text=True)          # tashrif buyuruvchi o'z kalitini kiritadi
     assert public_app.config["CACHE_DIR"] is None                # public rejimda disk kesh o'chirilgan
     # Claude modeli kalitsiz rad etiladi
@@ -84,3 +85,53 @@ def test_report_formats_escape_html():
     assert "<script>alert(1)</script>" not in html            # XSS himoyasi: matn ekranlanadi
     assert "&lt;script&gt;" in html
     assert report.to_markdown(parsed, reps).count("```c") >= 2
+
+
+def test_rate_limiter_survives_many_clients_and_denials_do_not_extend_window():
+    from deobf_agent.web.app import RateLimiter
+
+    lim = RateLimiter(2, 100)
+    assert lim.allow("a", 0) and lim.allow("a", 1) and not lim.allow("a", 2)
+    assert lim.allow("a", 101)                       # rad etilgan urinish oynani uzaytirmagan edi
+    for i in range(5000):                            # ko'p mijoz: tozalashdan keyin ham yangi IP xato bermaydi
+        assert lim.allow(f"ip{i}", 200 + i * 0.001)
+    assert lim.allow("yangi", 300)
+
+
+def test_personal_mode_rejects_foreign_host_and_cross_site_post():
+    app = create_app()
+    c = app.test_client()
+    assert c.get("/", headers={"Host": "rebind.example"}).status_code == 403        # DNS rebinding
+    assert c.post("/analyze", data={"code": "int f(){return 0;}", "engine": "offline"},
+                  headers={"Origin": "http://evil.example"}).status_code == 403     # boshqa sayt formasi
+    assert c.get("/", headers={"Host": "127.0.0.1:5000"}).status_code == 200
+    ok = c.post("/analyze", data={"code": "int f(){return 0;}", "engine": "offline"}, headers={"Origin": "http://localhost"})
+    assert ok.status_code == 200                                                     # o'z saytimizdan kelgan forma o'tadi
+    assert c.post("/analyze", data={"code": "x"}, headers={"Origin": "null"}).status_code == 403
+    assert c.post("/analyze", data={"code": "x"}, headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+
+
+def test_public_mode_function_cap_check_key_throttle_and_no_key_echo(public_app):
+    c = public_app.test_client()
+    many = "\n".join(f"int f{i}(int a) {{ return a + {i}; }}" for i in range(6))
+    h = c.post("/analyze", data={"code": many, "engine": "offline"}).get_data(as_text=True)
+    assert "ko&#39;pi bilan 3 ta funksiya" in h
+    secret = "sk-ant-api03-ZZZZZZZZZZZZZZZZZZZZZZZZ"
+    h = c.post("/analyze", data={"code": "int f(int a){return a;}", "engine": "sonnet", "api_key": secret}
+               ).get_data(as_text=True)
+    assert "ZZZZZZZZ" not in h                       # kalit hech qachon sahifaga qaytarilmaydi
+    codes = [c.post("/api/check-key", data={"model": "sonnet", "api_key": "yaroqsiz"}).status_code for _ in range(8)]
+    assert 429 in codes                              # kalit tekshiruvi cheklangan (kalit "oracle"i bo'lmasin)
+
+
+def test_error_pages_are_friendly():
+    c = create_app().test_client()
+    r = c.get("/download/yoq.md")
+    assert r.status_code == 404 and "topilmadi" in r.get_data(as_text=True)
+
+
+def test_report_html_is_self_contained_and_report_js_is_not_escaped():
+    parsed, reps = deobfuscate_text(S1, AgentConfig(offline=True))
+    html = report.to_html(parsed, reps)
+    assert "cdnjs" not in html and "http://" not in html.replace("http://www.w3.org", "")   # internetsiz ochiladi
+    assert 'aria-pressed' in html and "classList.toggle(&" not in html                       # skript buzilmagan

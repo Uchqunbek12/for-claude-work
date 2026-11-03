@@ -11,9 +11,11 @@ Nimalar solishtiriladi:
   * tashqi funksiyalar chaqiruvlari ketma-ketligi (stublar orqali).
 
 Xotira modeli: har bir ko'rsatkichli parametr uchun 4096 baytlik bufer ajratiladi va u
-tasodifiy baytlar, NUL bilan tugaydigan matn yoki nollar bilan to'ldiriladi. Funksiyada
-ko'rsatkich bo'lsa, butun son parametrlari kichik qiymatlar (0..300) bilan beriladi —
-odatda ular bufer uzunligi bo'ladi va bufer chegarasidan chiqmaslik kerak.
+tasodifiy baytlar, NUL bilan tugaydigan matn yoki nollar bilan to'ldiriladi. Har bir bufer
+"qo'riqchi sahifa" (PROT_NONE) bilan o'ralgan: bufer chegarasidan chiqib ketgan o'qish/yozish
+darhol ushlanadi va qo'shni xotirani jimgina buzmaydi. Funksiyada ko'rsatkich bo'lsa, butun
+son parametrlarining ko'pchiligi kichik (0..512, odatda bufer uzunligi), har to'rtinchisi esa
+istalgan qiymat (manfiy, katta, "sehrli" konstanta) bo'ladi.
 
 Himoya: har bir chaqiruv "qulash" (segfault, nolga bo'lish) va "osilib qolish"dan himoyalangan:
 xato bitta testda ushlanadi va butun test to'xtab qolmaydi. Ikkala funksiya ham bir xil
@@ -23,11 +25,13 @@ kirishda qulasa — bu kirish o'tkazib yuboriladi; faqat bittasi qulasa — bu f
 from __future__ import annotations
 
 import re
+import secrets
 import tempfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import compiler, parser, sandbox
+from . import compiler, expr, parser, sandbox
 
 # Butun son turlarini tashkil qiluvchi so'zlar (C, IDA, Ghidra uslublari).
 INTEGER_WORDS = {
@@ -124,8 +128,14 @@ _HARNESS_PRELUDE = r"""
 #include <string.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <stdlib.h>
 #ifndef _WIN32
 #include <sys/time.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
 #define JMP_BUF sigjmp_buf
 #define SETJMP(b) sigsetjmp(b, 1)
 #define LONGJMP(b, v) siglongjmp(b, v)
@@ -150,13 +160,13 @@ static const uint64_t EDGES[] = {0, 1, 2, 3, 7, 8, 15, 16, 31, 32, 0x7F, 0x80, 0
     0x7FFF, 0x8000, 0xFFFF, 0x7FFFFFFF, 0x80000000ull, 0xFFFFFFFFull, 0xFFFFFFFEull,
     0xFFFFFFFFFFFFFFFFull, 0x8000000000000000ull};
 static const uint64_t SMALL_EDGES[] = {0, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 100, 255, 256};
-/* Bufer bor funksiyalarda butun son ko'pincha uzunlik/indeks bo'ladi. Uni buferga sig'adigan
-   chegarada ushlab turamiz (BUF/8 — eng katta elementda ham, masalan 8 baytli, xavfsiz), aks holda
-   sort/nusxalash bufer tashqarisiga yozib, asl va yangi funksiya "ekvivalent" bo'lsa ham farq qiladi. */
-#define SAFE_LEN (BUF / 8)
-static uint64_t pick(int small) {
+/* mode 0 — to'liq diapazon; mode 1 — bufer bor: ko'pincha kichik (uzunlik/indeks), har to'rtinchisi to'liq diapazon;
+   mode 2 — faqat kichik (osilib qolishlar ko'payganda). Buferdan chiqib ketgan murojaat qo'riqchi sahifada ushlanadi. */
+#define SAFE_LEN 512
+static uint64_t pick(int mode) {
     uint64_t r = rnd64();
-    if (small) {
+    if (mode == 1 && r % 4 != 0) mode = 2;
+    if (mode == 2) {
         if (r % 4 == 0) return SMALL_EDGES[(r >> 8) % (sizeof(SMALL_EDGES) / sizeof(SMALL_EDGES[0]))];
         if (r % 4 == 1) return INTERESTING[(r >> 8) % (sizeof(INTERESTING) / sizeof(INTERESTING[0]))] % (SAFE_LEN + 1);
         return (r >> 8) % (SAFE_LEN + 1);
@@ -201,58 +211,129 @@ static void disarm(void) {
     setitimer(ITIMER_REAL, &tv, 0);
 #endif
 }
-static long long where(const void *p, unsigned char (*bufs)[BUF], int n) {
+static size_t PG;
+static int NBUF;
+static unsigned char *poolA, *poolB;
+#define SL(pool, k) ((pool) + PG + (size_t)(k) * 2 * PG)
+static void setup_pools(int nb) {
+    size_t total, k;
+    NBUF = nb;
+#ifndef _WIN32
+    PG = (size_t)sysconf(_SC_PAGESIZE);
+    if (PG < BUF) PG = BUF;
+    total = PG + (size_t)nb * 2 * PG;
+    poolA = (unsigned char *)mmap(0, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    poolB = (unsigned char *)mmap(0, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (poolA == (unsigned char *)MAP_FAILED || poolB == (unsigned char *)MAP_FAILED) { puts("SETUP failed"); exit(3); }
+    mprotect(poolA, PG, PROT_NONE);
+    mprotect(poolB, PG, PROT_NONE);
+    for (k = 0; k < (size_t)nb; k++) {
+        mprotect(SL(poolA, k) + PG, PG, PROT_NONE);
+        mprotect(SL(poolB, k) + PG, PG, PROT_NONE);
+    }
+#else
+    PG = BUF;
+    total = PG + (size_t)nb * 2 * PG;
+    poolA = (unsigned char *)calloc(total, 1);
+    poolB = (unsigned char *)calloc(total, 1);
+    (void)k;
+#endif
+}
+static long long where(const void *p, unsigned char *pool, int n) {
     int k;
     if (!p) return -1;
     for (k = 0; k < n; k++)
-        if ((const unsigned char *)p >= bufs[k] && (const unsigned char *)p < bufs[k] + BUF)
-            return (long long)k * BUF + ((const unsigned char *)p - bufs[k]);
+        if ((const unsigned char *)p >= SL(pool, k) && (const unsigned char *)p < SL(pool, k) + BUF)
+            return (long long)k * BUF + ((const unsigned char *)p - SL(pool, k));
     return -2;                                      /* buferlardan tashqarida */
+}
+/* Tashqi funksiya stublari manzillarni solishtirmasligi uchun: bufer ichidagi manzil -> (bufer, siljish) */
+uint64_t deobf_norm(uint64_t v) {
+    int k;
+    for (k = 0; k < NBUF; k++) {
+        if (v >= (uint64_t)(uintptr_t)SL(poolA, k) && v < (uint64_t)(uintptr_t)SL(poolA, k) + BUF)
+            return 0xB0F0000000000000ull + (uint64_t)k * BUF + (v - (uint64_t)(uintptr_t)SL(poolA, k));
+        if (v >= (uint64_t)(uintptr_t)SL(poolB, k) && v < (uint64_t)(uintptr_t)SL(poolB, k) + BUF)
+            return 0xB0F0000000000000ull + (uint64_t)k * BUF + (v - (uint64_t)(uintptr_t)SL(poolB, k));
+    }
+    return v;
 }
 """
 
 
-def interesting_constants(code: str) -> list[int]:
+_CHAR_ESC = {"n": 10, "t": 9, "r": 13, "0": 0, "\\": 92, "'": 39, '"': 34, "a": 7, "b": 8, "f": 12, "v": 11}
+
+
+def interesting_constants(code: str) -> tuple[list[int], int]:
     """Koddagi sonlar va ularning "qo'shnilari" (c, c+1, c-1, -c).
 
     `if (a1 == 0x1337BEEF)` kabi tarmoq faqat aynan shu qiymatda ishlaydi — tasodifiy son unga
-    deyarli hech qachon teng chiqmaydi. Shuning uchun kirishlarning bir qismini koddan olamiz.
+    deyarli hech qachon teng chiqmaydi. Shuning uchun kirishlarning bir qismini koddan olamiz:
+    avval barcha literallarning o'zi (IDA `i64` qo'shimchasi va 'q' kabi belgi literallari ham), so'ng ularning
+    qo'shnilari. Ro'yxat chegaralangan (600), shuning uchun juda ko'p literalli kodda oxirgilari tushib qolishi mumkin.
+    Natija: (qiymatlar, ulardan nechtasi aynan literal). Literallar `[1 : 1 + soni]` oralig'ida, koddagi tartibda turadi.
     """
+    lits: list[int] = []
+    for m in expr.C_INT_RE.finditer(parser.mask_code(code)):
+        v = expr.c_int(m.group(1))
+        if v is not None:
+            lits.append(v)
+    for m in re.finditer(r"'(\\.|[^\\'])'", code):
+        ch = m.group(1)
+        lits.append(_CHAR_ESC.get(ch[1], ord(ch[1])) if ch.startswith("\\") else ord(ch))
     vals: list[int] = [0]
-    for m in re.finditer(r"\b(0[xX][0-9A-Fa-f]+|\d+)[uUlL]*\b", parser.mask_code(code)):
-        v = int(m.group(1), 0)
-        for x in (v, v + 1, v - 1, -v):
+    seen = {0}
+    for v in lits:
+        x = v & 0xFFFFFFFFFFFFFFFF
+        if x not in seen and len(vals) < 600:
+            seen.add(x)
+            vals.append(x)
+    n_lits = len(vals) - 1
+    for v in lits:
+        for x in (v + 1, v - 1, -v):
             x &= 0xFFFFFFFFFFFFFFFF
-            if x not in vals:
+            if x not in seen and len(vals) < 600:
+                seen.add(x)
                 vals.append(x)
-        if len(vals) > 256:
-            break
-    return vals
+    return vals, n_lits
 
 
 def build_harness_source(ret_type: str, param_types: list[str], kinds: list[str], rkind: str,
-                         n_tests: int, interesting: list[int] | None = None) -> str:
-    """Ikki funksiyani taqqoslovchi main() funksiyali C dasturini yaratadi."""
-    n = len(param_types)
+                         n_tests: int, interesting: list[int] | None = None, nonce: str = "x",
+                         seed: int = 12345, n_lits: int = 0) -> str:
+    """Ikki funksiyani taqqoslovchi main() funksiyali C dasturini yaratadi.
+
+    nonce — natija satrlari prefiksi: tekshirilayotgan kod stdout'ga o'zi "RESULT ..." yoki "MISMATCH ..." deb
+    yozib, tekshiruvni aldab ketmasligi uchun faqat shu tasodifiy so'zli satrlar ishonchli hisoblanadi.
+    seed — tasodifiy kirishlar oqimi urug'i (kodning xeshidan olinadi: bir xil kod uchun bir xil, boshqasi uchun boshqa).
+    """
     nbuf = max(1, sum(k != "int" for k in kinds))
-    small = int(any(k != "int" for k in kinds))      # ko'rsatkich bo'lsa, butun sonlar kichik (uzunlik)
+    mode = 1 if any(k != "int" for k in kinds) else 0      # ko'rsatkich bo'lsa, butun sonlar ko'pincha kichik (uzunlik)
     params_decl = ", ".join(param_types) if param_types else "void"
     values = ", ".join(f"0x{v:X}ull" for v in (interesting or [0]))
-    lines = [_HARNESS_PRELUDE.replace("BUFSIZE_PLACEHOLDER", str(BUF_SIZE))
+    lines = [f"#define NLIT {max(n_lits, 1)}", _HARNESS_PRELUDE.replace("BUFSIZE_PLACEHOLDER", str(BUF_SIZE))
              .replace("/*INTERESTING*/", f"static const uint64_t INTERESTING[] = {{{values}}};"),
              f"{ret_type} {SYMBOL_A}({params_decl});",
              f"{ret_type} {SYMBOL_B}({params_decl});",
-             f"static unsigned char bufA[{nbuf}][BUF], bufB[{nbuf}][BUF];",
              "",
              "int main(void) {",
-             "    int t, mism = 0, skipped = 0, k, hangs = 0;",
-             "    rng_state = 12345ull ^ 0x9E3779B97F4A7C15ull;",
-             "    signal(SIGSEGV, on_signal); signal(SIGFPE, on_signal); signal(SIGILL, on_signal);",
+             "    int t, mism = 0, skipped = 0, done = 0, k, hangs = 0;",
+             f"    rng_state = ({seed}ull | 1ull) ^ 0x9E3779B97F4A7C15ull;",
+             f"    setup_pools({nbuf});",
              "#ifndef _WIN32",
-             "    signal(SIGBUS, on_signal); signal(SIGALRM, on_signal); signal(SIGABRT, on_signal);",
+             # Stek to'lib ketsa ham (cheksiz rekursiya) signalni alohida stekda ushlaymiz — jarayon qulamaydi
+             "    { static char altstack[65536]; stack_t ss; struct sigaction sa; int sg[6] = {SIGSEGV, SIGFPE, SIGILL, SIGBUS, SIGALRM, SIGABRT}; int q;",
+             "      ss.ss_sp = altstack; ss.ss_size = sizeof altstack; ss.ss_flags = 0; sigaltstack(&ss, 0);",
+             "      memset(&sa, 0, sizeof sa); sa.sa_handler = on_signal; sa.sa_flags = SA_ONSTACK | SA_NODEFER; sigemptyset(&sa.sa_mask);",
+             "      for (q = 0; q < 6; q++) sigaction(sg[q], &sa, 0); }",
+             "#else",
+             "    signal(SIGSEGV, on_signal); signal(SIGFPE, on_signal); signal(SIGILL, on_signal);",
              "#endif",
              f"    for (t = 0; t < {n_tests}; t++) {{",
              "        uint64_t rs = rnd64();",
+             # har sakkizinchi testda parametrlarga koddagi literallar KETMA-KET beriladi: `a == K1 && b == K2` kabi shartlar
+             # uchun (tasodifiy kirishda ikkala parametr bir vaqtda kerakli qiymat olishi deyarli mumkin emas)
+             f"        int seq = {1 if n_lits else 0} && (rs % 8 == 0); uint64_t sb = rs >> 7;",
              "        volatile int ca = 0, cb = 0;",
              "        volatile unsigned long long ra = 0, rb = 0;",
              "        unsigned long long ha, hb;"]
@@ -261,14 +342,14 @@ def build_harness_source(ret_type: str, param_types: list[str], kinds: list[str]
     bi = 0
     for i, (ptype, kind) in enumerate(zip(param_types, kinds)):
         if kind == "int":
-            lines.append(f"        {ptype} p{i} = ({ptype})pick({small} || hangs > 8);")
+            lines.append(f"        {ptype} p{i} = ({ptype})(seq ? INTERESTING[1 + (sb + {i}) % NLIT] : pick(hangs > 8 ? 2 : {mode}));")
             a_args.append(f"p{i}")
             b_args.append(f"p{i}")
             shows.append(f'printf("{", " if i else ""}0x%llx", (unsigned long long)p{i});')
         else:
-            lines.append(f"        fill(bufA[{bi}]); memcpy(bufB[{bi}], bufA[{bi}], BUF);")
-            a_args.append(f"({ptype})(uintptr_t)bufA[{bi}]")
-            b_args.append(f"({ptype})(uintptr_t)bufB[{bi}]")
+            lines.append(f"        fill(SL(poolA, {bi})); memcpy(SL(poolB, {bi}), SL(poolA, {bi}), BUF);")
+            a_args.append(f"({ptype})(uintptr_t)SL(poolA, {bi})")
+            b_args.append(f"({ptype})(uintptr_t)SL(poolB, {bi})")
             shows.append(f'printf("{", " if i else ""}buf{bi}");')
             bi += 1
 
@@ -277,29 +358,30 @@ def build_harness_source(ret_type: str, param_types: list[str], kinds: list[str]
         if rkind == "void":
             return f"{c};"
         if rkind == "ptr":
-            return f"r = (unsigned long long)where((const void *){c}, buf, {nbuf});"
+            return f"r = (unsigned long long)where((const void *){c}, pool, {nbuf});"
         return f"r = (unsigned long long)({ret_type}){c};"
 
     lines += [
         "        deobf_support_reset(rs);",
-        "        if (SETJMP(jb) == 0) { arm(); { unsigned long long r = 0; unsigned char (*buf)[BUF] = bufA; (void)buf; "
+        "        if (SETJMP(jb) == 0) { arm(); { unsigned long long r = 0; unsigned char *pool = poolA; (void)pool; "
         + call(SYMBOL_A, a_args) + " ra = r; } disarm(); } else { disarm(); ca = last_signal; }",
         "        ha = deobf_support_hash();",
         "        if (ca == SIGALRM) hangs++;          /* tsikl juda uzoq: keyingi kirishlar kichik bo'ladi */",
         "        if (ca) { skipped++; continue; }    /* asl funksiya bu kirishda ishlamaydi — solishtirmaymiz */",
+        "        done++;",
         "        deobf_support_reset(rs);",
-        "        if (SETJMP(jb) == 0) { arm(); { unsigned long long r = 0; unsigned char (*buf)[BUF] = bufB; (void)buf; "
+        "        if (SETJMP(jb) == 0) { arm(); { unsigned long long r = 0; unsigned char *pool = poolB; (void)pool; "
         + call(SYMBOL_B, b_args) + " rb = r; } disarm(); } else { disarm(); cb = 1; }",
         "        hb = deobf_support_hash();",
         "        {",
         "            const char *why = 0;",
         "            if (cb) why = \"yangi funksiya xato bilan to'xtadi yoki osilib qoldi\";",
         "            else if (ra != rb) why = \"qaytish qiymati\";",
-        f"            else for (k = 0; k < {nbuf}; k++) if (memcmp(bufA[k], bufB[k], BUF)) {{ why = \"bufer mazmuni\"; break; }}",
+        f"            else for (k = 0; k < {nbuf}; k++) if (memcmp(SL(poolA, k), SL(poolB, k), BUF)) {{ why = \"bufer mazmuni\"; break; }}",
         "            if (!why && ha != hb) why = \"global o'zgaruvchilar yoki tashqi chaqiruvlar\";",
         "            if (why) {",
         "                if (mism < 5) {",
-        '                    printf("MISMATCH (%s) args=(", why);',
+        f'                    printf("MISMATCH_{nonce} (%s) args=(", why);',
     ]
     lines += ["                    " + s for s in shows]
     lines += [
@@ -309,8 +391,9 @@ def build_harness_source(ret_type: str, param_types: list[str], kinds: list[str]
         "            }",
         "        }",
         "        fflush(stdout);",
+        "        if (mism >= 5) break;                /* farq aniq — davom ettirishning keragi yo'q */",
         "    }",
-        f'    printf("RESULT tests=%d mismatches=%d skipped=%d\\n", {n_tests} - skipped, mism, skipped);',
+        f'    printf("RESULT_{nonce} tests=%d mismatches=%d skipped=%d\\n", done, mism, skipped);',
         "    return 0;",
         "}",
     ]
@@ -371,18 +454,52 @@ class DefinedGlobal:
     init: str | None   # boshlang'ich qiymat matni
 
 
-_GLOBAL_DEF_RE = re.compile(
-    r"^(?:static\s+)?((?:(?:const|volatile|unsigned|signed)\s+)*[A-Za-z_]\w*(?:\s+[A-Za-z_]\w*)*?)"
-    r"\s*(\**)\s*([A-Za-z_]\w*)\s*((?:\[[^\]]*\])*)\s*(?:=\s*([\s\S]+))?$")
+_STORAGE_WORDS = {"static", "extern", "register", "typedef"}
 
 
-def split_globals(code: str, only: set[str] | None = None) -> tuple[str, list[DefinedGlobal]]:
+def _parse_global_def(text: str):
+    """'unsigned char t[4] = {1,2}' -> (base, stars, name, dims, init_offset yoki None). Tanib bo'lmasa None.
+
+    Matn o'ngdan chapga o'qiladi: avval '=' (boshlang'ich qiymat), so'ng massiv o'lchamlari, so'ng nom, qolgani tur.
+    Shunday qilinadi, chunki `unsigned counter` kabi turi faqat qualifier bo'lgan e'lonlarda nom va turni
+    regex bilan ajratish xato bo'laklarga bo'lib yuboradi (`unsigned counte` + `r`).
+    """
+    eq = -1
+    depth = 0
+    for i, ch in enumerate(text):
+        depth += ch in "([{"
+        depth -= ch in ")]}"
+        if ch == "=" and depth == 0 and text[i + 1:i + 2] != "=" and text[i - 1:i] not in "=!<>":
+            eq = i
+            break
+    left = text[:eq] if eq >= 0 else text
+    dm = re.search(r"((?:\[[^\]]*\]\s*)*)$", left)
+    dims = re.sub(r"\s+", "", dm.group(1)) if dm else ""
+    decl = left[:dm.start()].rstrip() if dm else left.rstrip()
+    nm = re.search(r"([A-Za-z_]\w*)$", decl)
+    if not nm:
+        return None
+    before = decl[:nm.start()].rstrip()
+    stars = "*" * before.count("*")
+    base = before.replace("*", " ").strip()
+    if not base:
+        return None
+    if base.split()[0] in _STORAGE_WORDS:
+        return None
+    return base, stars, nm.group(1), dims, (eq + 1 if eq >= 0 else None)
+
+
+def split_globals(code: str, only: set[str] | None = None, inits: dict[str, str] | None = None
+                  ) -> tuple[str, list[DefinedGlobal]]:
     """Funksiyalardan tashqaridagi global o'zgaruvchi ta'riflarini `extern` e'longa aylantiradi.
 
     Nima uchun: asl va yangi funksiya BIR XIL global holat bilan ishlashi kerak. Shuning uchun global
     o'zgaruvchilar yordamchi modulda bitta nusxada yaratiladi va har bir chaqiruvdan oldin boshlang'ich
     holatiga qaytariladi (ichki o'zgarishlar keyingi testga "oqib" o'tmaydi).
-    only — faqat shu nomlarni aylantirish (yangi kodda asl koddagi globallarni qayta ta'riflagan bo'lsa).
+    only — faqat shu nomlarni qayta ishlash (yangi kodda asl koddagi globallarni qayta ta'riflagan bo'lsa).
+    inits — asl koddagi boshlang'ich qiymatlar. Yangi kod o'sha nomni BOSHQA boshlang'ich qiymat bilan ta'riflasa,
+    uni asl nusxaga almashtirmaymiz (aks holda jadvaldagi xato yashirinib qolardi): u yangi kodning o'z `static` nusxasi
+    bo'lib qoladi va xatti-harakat farqi testda ko'rinadi.
     """
     masked = parser.mask_code(code)
     spans = []
@@ -406,21 +523,27 @@ def split_globals(code: str, only: set[str] | None = None) -> tuple[str, list[De
             m_text = masked[stmt_start:i].strip()
             lead = len(masked[stmt_start:i]) - len(masked[stmt_start:i].lstrip())
             s0 = stmt_start + lead
-            m = _GLOBAL_DEF_RE.match(m_text)
-            # const + boshlang'ich qiymatli global — faqat o'qiladigan jadval/satr (masalan MESSAGE[]).
-            # Uni extern qilmaymiz: o'zgarmas holat "oqib" ketmaydi, har bir modul o'z (static) nusxasini
-            # saqlasa bo'ladi. Aks holda `extern const char MESSAGE[];` to'liqsiz tur bo'lib, sizeof buziladi.
-            read_only = m and "const" in m.group(1).split() and m.group(5) is not None
-            skip = (not m or read_only or m_text.startswith(("typedef", "extern", "#", "struct ", "union ", "enum "))
-                    or "(" in m_text.split("=")[0] or "," in parser.split_top_level(m_text.split("=")[0], ";")[0]
-                    or m.group(3) in ("return",))
-            if not skip and (only is None or m.group(3) in only):
-                init = code[s0 + m.start(5):s0 + m.end(5)].strip() if m.group(5) else None
-                g = DefinedGlobal(m.group(3), m.group(1).replace("static ", "").strip(), m.group(2), m.group(4), init)
-                found.append(g)
-                out.append(code[pos:s0])
-                out.append(f"extern {g.base} {g.stars}{g.name}{g.dims};")
-                pos = i + 1
+            head = m_text.split("=")[0]
+            parsed_def = None if (m_text.startswith(("typedef", "extern", "#", "struct ", "union ", "enum "))
+                                  or "(" in head or "," in parser.split_top_level(head, ";")[0]) else _parse_global_def(
+                m_text.removeprefix("static").strip() if m_text.startswith("static") else m_text)
+            if parsed_def and parsed_def[2] != "return" and (only is None or parsed_def[2] in only):
+                base, stars, name, dims, init_off = parsed_def
+                rest = m_text.removeprefix("static") if m_text.startswith("static") else m_text
+                shift = (len("static") + len(rest) - len(rest.lstrip())) if m_text.startswith("static") else 0
+                init = code[s0 + shift + init_off:s0 + len(m_text)].strip() if init_off is not None else None
+                words = base.split()
+                if "const" in words and init is not None:
+                    pass                      # faqat o'qiladigan jadval/satr: har bir modul o'z (static) nusxasini saqlaydi
+                elif only is not None and init is not None and re.sub(r"\s+", "", init) != (inits or {}).get(name):
+                    out.append(code[pos:s0])  # boshqa qiymatli jadval: yangi kodning o'z static nusxasi bo'lib qoladi
+                    out.append(code[s0:i + 1] if m_text.startswith("static") else "static " + code[s0:i + 1])
+                    pos = i + 1
+                else:
+                    found.append(DefinedGlobal(name, base, stars, dims, init))
+                    out.append(code[pos:s0])
+                    out.append(f"extern {base} {stars}{name}{dims};")
+                    pos = i + 1
             stmt_start = i + 1
         i += 1
     out.append(code[pos:])
@@ -456,6 +579,7 @@ def build_support_source(data_blobs: dict[str, bytes], gvars: list[GlobalVar], s
     deobf_support_hash() esa chaqiruvdan keyingi holatning "barmoq izini" (xeshini) beradi.
     """
     L = ["#include <stdint.h>", "#include <string.h>",
+         "extern uint64_t deobf_norm(uint64_t v);",
          "static uint64_t s_rng; static uint64_t s_trace; static uint64_t s_calls;",
          "static uint64_t s_next(void) { s_rng ^= s_rng << 13; s_rng ^= s_rng >> 7; s_rng ^= s_rng << 17; return s_rng; }",
          "static void s_fill(void *p, size_t n) { unsigned char *b = p; size_t i; for (i = 0; i < n; i++) b[i] = (unsigned char)s_next(); }",
@@ -475,7 +599,8 @@ def build_support_source(data_blobs: dict[str, bytes], gvars: list[GlobalVar], s
             L.append(f"{g.base} {g.stars}{g.name}{dims};")
             resets.append(f"memcpy(&{g.name}, &{g.name}__init, sizeof {g.name});")
         else:
-            L.append(f"{g.base} {g.stars}{g.name}{g.dims or ''};")
+            base = re.sub(r"\bconst\b", "", g.base).strip()        # const bo'lsa .rodata'ga tushadi va s_fill qulaydi
+            L.append(f"{base} {g.stars}{g.name}{g.dims or ''};")
             resets.append(f"s_fill(&{g.name}, sizeof {g.name});")
         hashes.append(f"h = s_mix(h, &{g.name}, sizeof {g.name});")
     for g in gvars:
@@ -485,9 +610,12 @@ def build_support_source(data_blobs: dict[str, bytes], gvars: list[GlobalVar], s
         hashes.append(f"h = s_mix(h, &{g.name}, sizeof {g.name});")
     for name, n in stubs.items():
         params = ", ".join(f"uint64_t a{i}" for i in range(n)) or "void"
-        body = [f"uint64_t h = 0x{abs(hash(name)) & 0xFFFFFFFFFFFF:X}ull ^ (s_calls++ * 0x9E37ull);"]
-        body += [f"h = (h ^ (a{i} & 0xFFFFFFFFull)) * 0x100000001B3ull;" for i in range(n)]
-        body += ["s_trace = s_trace * 31u + h;", "return (h >> 17) & 0x7FFFFFFFull;"]
+        body = [f"uint64_t h = 0x{zlib.crc32(name.encode()):X}ull ^ (s_calls++ * 0x9E37ull);"]
+        # argument manzil bo'lsa — (bufer, siljish) ga keltiriladi: A va B buferlari manzili turlicha bo'lsa ham bir xil xesh
+        body += [f"h = (h ^ deobf_norm(a{i})) * 0x100000001B3ull; h ^= h >> 29;" for i in range(n)]
+        # qaytish qiymati: ko'pincha kichik musbat, har to'rtinchisi — ishorali (manfiy ham bo'lishi mumkin)
+        body += ["s_trace = s_trace * 31u + h;",
+                 "{ uint64_t v = h >> 17; return (v & 3) == 0 ? (uint64_t)(int64_t)(int32_t)v : (v & 0x7FFFFFFFull); }"]
         L.append(f"uint64_t {name}({params}) {{ " + " ".join(body) + " }")
     L.append("void deobf_support_reset(uint64_t seed) { s_rng = seed | 1u; s_trace = 0; s_calls = 0; "
              + " ".join(resets) + " }")
@@ -520,7 +648,8 @@ def differential_test(code_a: str, func_a: str, code_b: str, func_b: str,
              and not re.search(rf"\b{k}\s*\[[^\]]*\]\s*=", code_a)}
     code_a, defined = split_globals(code_a)
     names = {g.name for g in defined}
-    code_b, _ = split_globals(code_b, only=names)            # yangi kod asl globalni qayta ta'riflagan bo'lsa
+    code_b, _ = split_globals(code_b, only=names,            # yangi kod asl globalni qayta ta'riflagan bo'lsa
+                              inits={g.name: re.sub(r"\s+", "", g.init or "") for g in defined})
     gvars = find_globals(code_a + "\n" + code_b, set(blobs) | names)
     code_a, code_b = declare_globals(code_a, gvars), declare_globals(code_b, gvars)
 
@@ -548,8 +677,10 @@ def _run_diff(wd: Path, code_a, func_a, code_b, func_b, ret_type, param_types, k
     if not res_b.ok:
         return DiffResult("inconclusive", details="Yangi kod kompilyatsiya bo'lmadi:\n" + res_b.errors,
                           failed="candidate")
-    harness = build_harness_source(ret_type, param_types, kinds, rkind, n_tests,
-                                   interesting_constants(code_a + "\n" + code_b))
+    nonce = secrets.token_hex(6)                                   # faqat test dasturi biladigan so'z (soxta natijadan himoya)
+    seed = zlib.crc32((code_a + "\0" + code_b).encode("utf-8", "replace"))
+    consts, n_lits = interesting_constants(code_a + "\n" + code_b)
+    harness = build_harness_source(ret_type, param_types, kinds, rkind, n_tests, consts, nonce, seed, n_lits)
     res_h, obj_h = compiler.compile_object(harness, wd, "harness")
     if not res_h.ok:
         return DiffResult("inconclusive", details="Test dasturi kompilyatsiya bo'lmadi:\n" + res_h.errors)
@@ -569,15 +700,19 @@ def _run_diff(wd: Path, code_a, func_a, code_b, func_b, ret_type, param_types, k
             return DiffResult("inconclusive", details="Bog'lash (link) bo'lmadi:\n" + res_l.errors)
         stubs = {name: max(call_arity(code_a, name), call_arity(code_b, name)) for name in sorted(missing)}
     proc = sandbox.run([str(exe)], timeout=TEST_TIMEOUT, cpu_sec=int(TEST_TIMEOUT), mem_mb=512, cwd=str(wd))
+    out = proc.stdout
+    # Faqat test dasturining o'z satrlari (nonce bilan) ishonchli; tekshirilayotgan kod yozgan boshqa satrlar e'tiborsiz.
+    found = [ln.replace(f"MISMATCH_{nonce}", "MISMATCH", 1) for ln in out.splitlines()
+             if ln.startswith(f"MISMATCH_{nonce} ")]
+    m = re.search(rf"^RESULT_{nonce} tests=(\d+) mismatches=(\d+) skipped=(\d+)$", out, flags=re.M)
+    if (proc.timed_out or proc.returncode != 0 or not m) and found:
+        # Dastur oxirigacha yetmadi (osilib qoldi/qulab tushdi), lekin farq allaqachon topilgan — bu aniq farq
+        why = "vaqt tugadi" if proc.timed_out else f"favqulodda to'xtadi, kod {proc.returncode}"
+        return DiffResult("mismatch", 0, len(found), f"Farq topildi (test dasturi {why}):\n" + "\n".join(found[:5]))
     if proc.timed_out:
         return DiffResult("inconclusive", details=f"Test {TEST_TIMEOUT:.0f} soniyada tugamadi (cheksiz tsikl?)")
-    out = proc.stdout
-    m = re.search(r"RESULT tests=(\d+) mismatches=(\d+) skipped=(\d+)", out)
     if proc.returncode != 0 or not m:
-        # Dasturning ixtiyoriy chiqishini qaytarmaymiz — faqat test dasturining o'z qatorlari
-        lines = [ln for ln in out.splitlines() if ln.startswith(("MISMATCH", "RESULT"))][:5]
-        return DiffResult("inconclusive", details=f"Test dasturi favqulodda to'xtadi (kod {proc.returncode})"
-                                                  + ("\n" + "\n".join(lines) if lines else ""))
+        return DiffResult("inconclusive", details=f"Test dasturi favqulodda to'xtadi (kod {proc.returncode})")
     tests, mism, skipped = int(m.group(1)), int(m.group(2)), int(m.group(3))
     notes = []
     if stubs:
@@ -587,9 +722,11 @@ def _run_diff(wd: Path, code_a, func_a, code_b, func_b, ret_type, param_types, k
     if skipped:
         notes.append(f"{skipped} ta kirishda asl funksiyaning o'zi xato bilan to'xtadi yoki osilib qoldi (o'tkazildi)")
     note = (" (" + "; ".join(notes) + ")") if notes else ""
-    examples = "\n".join(line for line in out.splitlines() if line.startswith("MISMATCH"))
+    examples = "\n".join(found[:5])
     if tests == 0:
         return DiffResult("inconclusive", 0, 0, "Hech bir kirishda asl funksiya normal ishlamadi" + note)
-    if mism == 0:
-        return DiffResult("equivalent", tests, 0, f"{tests} ta tasodifiy test — barchasi mos keldi{note}")
-    return DiffResult("mismatch", tests, mism, f"{mism}/{tests} testda farq{note}:\n{examples}")
+    if mism:
+        return DiffResult("mismatch", tests, mism, f"{mism}/{tests} testda farq{note}:\n{examples}")
+    if tests < max(20, min(n_tests // 4, 200)):
+        return DiffResult("inconclusive", tests, 0, f"Faqat {tests} ta test o'tkazilgani uchun ishonchli xulosa yo'q{note}")
+    return DiffResult("equivalent", tests, 0, f"{tests} ta tasodifiy test — barchasi mos keldi{note}")

@@ -8,8 +8,8 @@ from tests.fakes import FakeClient, FakeResponse, FakeUsage, make_result
 
 def test_model_aliases(monkeypatch):
     monkeypatch.delenv("DEOBF_MODEL", raising=False)
-    assert llm.resolve_model(None) == "claude-haiku-5-5"          # default — eng arzon
-    assert llm.resolve_model("sonnet") == "claude-sonnet-5-5"
+    assert llm.resolve_model(None) == "claude-sonnet-5-5"         # default — Sonnet 5.5
+    assert llm.resolve_model("haiku") == "claude-haiku-5-5"
     assert llm.resolve_model("OPUS") == "claude-opus-5-5"
     assert llm.resolve_model("claude-some-model") == "claude-some-model"
     monkeypatch.setenv("DEOBF_MODEL", "opus")
@@ -24,8 +24,9 @@ def test_request_shape_and_cost():
     assert res.c_code.startswith("int f")
     call = client.messages.calls[0]
     assert call["model"] == "claude-haiku-5-5"
-    assert call["output_config"] == {"effort": "low"}
-    assert call["extra_body"] == {"cache_control": {"type": "ephemeral"}}
+    assert call["output_config"]["effort"] == "low"
+    assert call["output_config"]["format"]["type"] == "json_schema"      # javob sxema bo'yicha
+    assert call["cache_control"] == {"type": "ephemeral"}
     assert call["messages"] == [{"role": "user", "content": "salom"}]
     # 2000 * 0.10 / 1e6 + 1000 * 0.50 / 1e6 = 0.0007 $
     assert s.usage.cost_usd == pytest.approx(0.0007)
@@ -59,8 +60,48 @@ def test_disk_cache(tmp_path):
 
 def test_refusal_and_truncation():
     s = llm.ClaudeSession(model="claude-haiku-5-5", client=FakeClient([FakeResponse(None, stop_reason="refusal")]))
-    with pytest.raises(llm.LLMError, match="bosh tortdi"):
+    with pytest.raises(llm.LLMError, match="xavfsizlik qoidalari"):
         s.ask("x")
     s = llm.ClaudeSession(model="claude-haiku-5-5", client=FakeClient([FakeResponse(None, stop_reason="max_tokens")]))
     with pytest.raises(llm.LLMError, match="token limitiga"):
         s.ask("x")
+
+
+def test_truncated_or_invalid_json_is_llmerror_and_cost_counted():
+    # kesilgan JSON (stop_reason end_turn, lekin yaroqsiz) -> xom ValidationError emas, LLMError; narx hisobga olinadi
+    s = llm.ClaudeSession(model="claude-sonnet-5-5", client=FakeClient([FakeResponse(None, raw_text='{"function_name": "f", "su')]))
+    with pytest.raises(llm.LLMError, match="sxema"):
+        s.ask("x")
+    assert s.usage.requests == 1 and s.usage.cost_usd > 0
+    assert s.messages == []                                       # savol tarixda "osilib" qolmadi
+    r = llm.ClaudeSession(model="claude-sonnet-5-5", client=FakeClient([FakeResponse(None, stop_reason="refusal")]))
+    with pytest.raises(llm.LLMError):
+        r.ask("x")
+    assert r.usage.requests == 1                                  # rad etilgan javob ham pul turadi
+
+
+def test_forget_removes_cached_answers(tmp_path):
+    cache = llm.DiskCache(tmp_path)
+    s = llm.ClaudeSession(model="claude-sonnet-5-5", client=FakeClient([FakeResponse(make_result("x"))]), cache=cache)
+    s.ask("q")
+    assert list(tmp_path.glob("*.json"))
+    s.forget()
+    assert not list(tmp_path.glob("*.json"))
+
+
+def test_public_mode_never_uses_server_key(monkeypatch):
+    from deobf_agent import sandbox
+
+    monkeypatch.setattr(sandbox, "PUBLIC", True)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-SERVERKEYSERVERKEY1234")
+    ok, msg = llm.check_api_key("sonnet")
+    assert not ok and "o'z API kalitingizni" in msg and "SERVERKEY" not in msg
+    with pytest.raises(llm.LLMError):
+        llm.make_client(None)
+    with pytest.raises(llm.LLMError, match="format"):
+        llm.make_client("not-a-key")
+
+
+def test_api_key_hidden_from_repr():
+    s = llm.ClaudeSession(model="claude-sonnet-5-5", api_key="sk-ant-api03-SECRETSECRETSECRET1234")
+    assert "SECRET" not in repr(s)

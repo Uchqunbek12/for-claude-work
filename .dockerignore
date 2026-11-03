@@ -11,3 +11,6 @@ samples/bin
 samples/decompiled/*.ida.c
 samples/decompiled/*.ghidra.c
 *.bat
+.env
+.env.*
+*.egg-info

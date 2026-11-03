@@ -30,15 +30,20 @@ bir topilma va butun funksiya uchun **o'xshatishli, atamasiz** izoh ham tayyorla
 
 ## 3. Offline va Claude farqi
 
-* **Offline rejim** tayyor matnlardan foydalanadi (`explain.py`): har bir chalkashtirish usuli uchun bitta
-  turg'un o'xshatish yozib qo'yilgan (pastdagi jadval). Bu internetsiz, bepul va **har doim bir xil** —
-  ishonchli, lekin umumlashgan.
-* **Claude rejimi** xuddi shu uslubda, lekin aynan shu funksiyaga moslab yozadi (`prompts.py` dagi
-  qoidalar Claude'ga o'xshatishlardan foydalanishni va atama ishlatmaslikni buyuradi). Bu jonliroq, lekin
-  pullik.
+* **Offline rejim** tozalangan kodni gap-gapga ajratib, har bir qadam uchun **aniq jumla** yasaydi (`narrate.py`),
+  masalan: «`v2` ga `v1` ni `v0` ga bo'lgandagi qoldiqni yozadi» va oddiy tilda: «`v1` ni `v0` ga bo'lganda qoladigan
+  qoldiqni hisoblab, «v2» qutisiga soladi». Funksiya nima hisoblashini ham aytadi, agar tanisa: Evklid algoritmi (EKUB),
+  FNV xesh, XOR shifrlash, pufakchali saralash, bit aylantirish yoki oddiy formula. Chalkashtirishni tozalash (olib
+  tashlangan keraksiz qatorlar, hech qachon bajarilmaydigan tarmoqlar, tekislangan boshqaruv oqimi) alohida bloklar
+  bo'ladi; ularning oddiy tildagi izohi `explain.py` dagi qisqa o'xshatishlardan olinadi. Bu internetsiz, bepul va
+  **har doim bir xil**. Cheklov: faqat tanish shakllarni aniq nomlaydi; boshqasini umumiy gap bilan tushuntiradi.
+* **Claude rejimi** xuddi shu uslubda, lekin aynan shu funksiyaga moslab yozadi (`prompts.py` dagi qoidalar: har bir blok
+  nima qilishini aytsin, `simple` maydoni bo'sh bo'lmasin va kodni takrorlamasin, atamani butun javobda bir marta
+  tushuntirsin, oddiy kod uchun ham o'xshatishlar: o'zgaruvchi — yorliqli idish, tsikl — savatdagi har bir mevaga bir xil
+  ish, shart — yo'l ayrilishi va h.k.). Bu jonliroq, lekin pullik. **Eslatma:** Claude rejimining matn sifati haqiqiy API
+  bilan hali o'lchanmagan (kalit bo'lmagani uchun faqat soxta mijoz bilan sinalgan).
 
-Ikkala holatda ham o'xshatishlar **bir xil obrazlar oilasidan** olingan (bozor, oshxona/retsept, dala,
-xat/qulf), shunda hikoya bir butun bo'lib tuyuladi.
+Ikkala holatda ham o'xshatishlar **bir xil obrazlar oilasidan** olingan (bozor, oshxona/retsept, dala, xat/qulf).
 
 ## 4. Har bir usul uchun o'xshatish
 

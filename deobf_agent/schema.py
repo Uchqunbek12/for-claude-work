@@ -14,13 +14,17 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+Technique = Literal["mba", "opaque_predicate", "control_flow_flattening", "encoded_strings", "encoded_constants",
+                    "dead_code", "other"]
+
+
 class Block(BaseModel):
     title: str = Field(description="Short human-readable name of the block, in the requested language")
     original_lines: str = Field(description="Line range in the numbered input pseudocode, e.g. '12-18'")
     original_code: str = Field(description="The obfuscated pseudocode fragment this block covers (verbatim, may be shortened with ...)")
     simplified_code: str = Field(description="The equivalent fragment of the clean C code")
-    explanation: str = Field(description="Explanation for an analyst: what this block does and what obfuscation was removed, in the requested language")
-    simple: str = Field(description="The same block explained for a complete beginner with an everyday-life analogy (no jargon), 1-3 sentences, in the requested language")
+    explanation: str = Field(description="For an analyst: what the block computes and why the clean form is equivalent (see the system prompt)")
+    simple: str = Field(description="Plain-language retelling for a complete beginner (see the system prompt); never empty")
 
 
 class Rename(BaseModel):
@@ -33,9 +37,8 @@ class DeobfResult(BaseModel):
     function_name: str = Field(description="Original function name, exactly as in the input")
     suggested_name: str = Field(description="Suggested meaningful name for the function (snake_case)")
     summary: str = Field(description="2-5 sentences for an analyst: what the function does, in the requested language")
-    simple_summary: str = Field(description="3-6 sentences explaining the whole function to a person with no computer knowledge, using everyday analogies (market, kitchen, recipe), in the requested language")
-    techniques: list[str] = Field(description="Obfuscation techniques found, using ids: mba, opaque_predicate, "
-                                              "control_flow_flattening, encoded_strings, encoded_constants, dead_code, other")
+    simple_summary: str = Field(description="The whole function as one small story for a person with no computer knowledge (see the system prompt); never empty")
+    techniques: list[Technique] = Field(description="Obfuscation techniques found (ids only)")
     c_code: str = Field(description="Complete, compilable, simplified C function. MUST keep the original function "
                                     "name and the exact parameter list (count, order, types). Locals may be renamed.")
     blocks: list[Block] = Field(description="Block-by-block mapping from obfuscated pseudocode to clean code, in execution order")

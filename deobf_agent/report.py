@@ -11,6 +11,8 @@ import json
 import re
 from pathlib import Path
 
+from markupsafe import Markup, escape
+
 from .agent import FunctionReport
 from .explain import TECH_NAMES_UZ
 from .models import ParsedInput
@@ -22,9 +24,24 @@ CONFIDENCE_UZ = {"low": "past", "medium": "o'rta", "high": "yuqori"}
 TEMPLATE_GLOBALS = dict(tech_names=TECH_NAMES_UZ, style_names=STYLE_NAMES, confidence_uz=CONFIDENCE_UZ)
 
 
+def rich(text) -> Markup:
+    """Matnni xavfsiz ko'rsatadi: avval hammasi ekranlanadi, so'ng faqat `kod` bo'laklari <code> ga o'raladi."""
+    return Markup(re.sub(r"`([^`\n]+)`", r"<code>\1</code>", str(escape(text or ""))))
+
+
+def split_tool_header(code: str) -> tuple[str, str]:
+    """Offline natijaning boshidagi vosita izohini (/* deobf-agent: ... */) kod qismidan ajratadi."""
+    m = re.match(r"\s*/\*\s*\n\s*\*\s*deobf-agent:.*?\*/\s*\n", code, flags=re.S)
+    if not m:
+        return "", code
+    note = "\n".join(re.sub(r"^\s*\*? ?", "", ln) for ln in m.group(0).strip()[2:-2].strip().splitlines())
+    return note.strip(), code[m.end():]
+
+
 def display_code(rep: FunctionReport) -> str:
-    """Ko'rsatish uchun: funksiya nomini taklif qilingan mazmunli nomga almashtiradi."""
-    code = rep.result.c_code
+    """Ko'rsatish uchun: funksiya nomini taklif qilingan mazmunli nomga almashtiradi (vosita izohi alohida ko'rsatiladi)."""
+    code = split_tool_header(rep.result.c_code)[1]
+    code = re.sub(r"\A(?:\s*//\s*(?:Manba|Dekompilyator):[^\n]*\n)+", "", code).lstrip("\n")   # kirish faylidagi manba izohlari
     new = rep.result.suggested_name
     if new and new != rep.function.name and re.fullmatch(r"[A-Za-z_]\w*", new):
         code = re.sub(rf"\b{re.escape(rep.function.name)}\b", new, code)
@@ -46,6 +63,7 @@ def report_to_dict(rep: FunctionReport) -> dict:
         "elapsed_sec": rep.elapsed_sec,
         "original_code": rep.function.text,
         "display_code": display_code(rep),
+        "tool_note": split_tool_header(rep.result.c_code)[0],
         "result": rep.result.model_dump(),
         "static_findings": [f.to_dict() for f in rep.analysis.findings],
         "state_machines": [sm.describe_uz() for sm in rep.analysis.state_machines],
@@ -136,8 +154,11 @@ def _jinja_env():
     env = Environment(loader=FileSystemLoader(str(Path(__file__).parent / "web" / "templates")),
                       autoescape=select_autoescape(["html"]))
     env.globals.update(TEMPLATE_GLOBALS)
+    env.filters["rich"] = rich
     return env
 
 
 def to_html(parsed: ParsedInput, reports: list[FunctionReport]) -> str:
-    return _jinja_env().get_template("standalone.html").render(data=to_data(parsed, reports))
+    """Yagona faylli HTML hisobot: stil va almashtirgich skripti ichiga joylangan (CDN'siz, internetsiz ochiladi)."""
+    toggle_js = (Path(__file__).parent / "web" / "static" / "report.js").read_text(encoding="utf-8")
+    return _jinja_env().get_template("standalone.html").render(data=to_data(parsed, reports), report_js=Markup(toggle_js))

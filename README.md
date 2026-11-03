@@ -18,17 +18,18 @@ psevdokod → parser → statik tahlil (bepul) → Claude → tekshiruv (gcc + d
 - **Avtomatik soddalashtirish:** MBA → oddiy ifoda, soxta shartlar va o'lik tarmoqlarni kesish,
   **flattening'ni yechish** (`while(1){switch}` → `while`/`if`).
 - **LLM (Claude):** toza C kod, bloklar bo'yicha tushuntirish, mazmunli nomlar. Standart model —
-  **Haiku 5.5** (arzon, ~$0.001/funksiya); `--model sonnet` / `opus` bilan bir zumda almashtiriladi.
+  **Sonnet 5.5** (kuchli, o'rtacha narxda); `--model haiku` (arzonroq) / `opus` (kuchliroq) bilan bir zumda almashtiriladi.
 - **Murakkab kod:** ko'rsatkich/bufer parametrlari, bir nechta funksiyali kirish (yordamchi funksiyalar
   avval tahlil qilinadi), aniqlanmagan tashqi funksiyalar, global o'zgaruvchilar ham qo'llab-quvvatlanadi.
 - **Tekshiruv:** gcc kompilyatsiyasi + asl psevdokod bilan **differensial test** (2000 tasodifiy kirish).
-- **Ikki tilda tushuntirish:** har bir izoh "mutaxassis uchun" (atamalar bilan) va **"dehqoncha"**
-  (kompyuterni bilmaydigan odam uchun, hayotiy o'xshatishlar bilan) beriladi — Web UI'da bir tugma bilan
+- **Har bir blok tushunarli:** offline rejim ham tozalangan kodni qadam-baqadam, aniq jumlalar bilan tushuntiradi va
+  funksiya nima hisoblashini aytadi (EKUB, FNV xesh, XOR, saralash ...). Har bir izoh ikki xil: "mutaxassis uchun"
+  va **"dehqoncha"** (kompyuterni bilmaydigan odam uchun, hayotiy o'xshatishlar bilan) — Web UI'da bir tugma bilan
   almashtiriladi. Batafsil: [docs/05](docs/05_dehqoncha_tushuntirish.md).
 - **Tejamkorlik:** prompt keshi, disk keshi (takroriy tahlil = $0), narx hisoblagich.
 - **Interfeys:** CLI (`deobf`) va Web UI (`deobf web`); hisobot Markdown / HTML / JSON.
-- **Internetga chiqarish:** `DEOBF_PUBLIC=1` bilan xavfsiz public rejim (kalit saqlanmaydi, cheklangan
-  muhit); `Dockerfile` va `render.yaml` tayyor. Batafsil: [docs/04](docs/04_internetga_chiqarish.md).
+- **Internetga chiqarish:** `DEOBF_PUBLIC=1` bilan xavfsiz public rejim (kalit saqlanmaydi, tashrif buyuruvchi kodi
+  serverda ishga tushirilmaydi, cheklovlar qattiq); `Dockerfile` va `render.yaml` tayyor. Batafsil: [docs/04](docs/04_internetga_chiqarish.md).
 - **Tillar:** tushuntirishlar o'zbek (standart), rus yoki ingliz tilida.
 
 ## Tez boshlash
@@ -45,8 +46,8 @@ pip install -e ".[dev]"
 
 deobf check                                                     # diagnostika: kalit ishlayaptimi?
 deobf analyze samples/decompiled/s3_flatten.angr.c --offline   # bepul
-deobf analyze samples/decompiled/s3_flatten.angr.c              # Claude Haiku (standart)
-deobf analyze samples/decompiled/s3_flatten.angr.c --model sonnet
+deobf analyze samples/decompiled/s3_flatten.angr.c              # Claude Sonnet 5.5 (standart)
+deobf analyze samples/decompiled/s3_flatten.angr.c --model haiku
 deobf web                                                       # http://127.0.0.1:5000
 deobf web --public                                              # internetga chiqariladigan demo rejimi
 ```
@@ -60,7 +61,7 @@ Batafsil: **[docs/02_foydalanish.md](docs/02_foydalanish.md)**.
 | Haqiqiy asl kodga ekvivalent | **6/8** (2 tasida dekompilyatorning o'zi xato qilgan) |
 | Obfuskatsiya usullarini aniqlash | **100%** |
 | Tsiklomatik murakkablik | **58 → 21** (−64%) |
-| Qatorlar | **216 → 100** (−54%) |
+| Qatorlar | **216 → 95** (−56%) |
 
 To'liq jadval: [docs/baholash_offline.md](docs/baholash_offline.md).
 
@@ -73,13 +74,15 @@ deobf_agent/
   unflatten.py   flattening'ni avtomatik yechish (graf tahlili)
   offline.py     LLM'siz soddalashtirish
   explain.py     tushuntirish matnlari: mutaxassis nomlari + "dehqoncha" o'xshatishlar
+  narrate.py     tozalangan koddan aniq o'zbekcha jumlalar yasash, funksiya ma'nosini aniqlash (LLM'siz)
+  blocks.py      offline bloklar: kod qadamlari + olib tashlangan narsalar
   prompts.py     Claude uchun ko'rsatmalar
   schema.py      javob sxemasi (structured output)
   llm.py         Claude API: modellar, narx, kesh, xatolar
   verifier.py    kompilyatsiya + differensial test
   harness.py     differensial test generatori
   compiler.py    gcc bilan ishlash (IDA/Ghidra idiomlarini moslashtirish)
-  sandbox.py     tashqi dasturlarni cheklangan muhitda ishga tushirish (public rejim uchun)
+  sandbox.py     tashqi dasturlarni cheklangan muhitda ishga tushirish; public rejimda kodni ishga tushirishni o'chirish
   agent.py       hammasini birlashtiruvchi agent sikli
   report.py      Markdown / HTML / JSON hisobot
   evaluate.py    namunalar bo'yicha baholash

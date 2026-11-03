@@ -12,6 +12,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
 main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
 header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
@@ -20,7 +21,9 @@ h1 { font: 700 20px/1.2 var(--mono); margin: 0; }
 header span { color: var(--muted); }
 h2 { font-size: 17px; margin: 32px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--rule); }
 h2 code { overflow-wrap: anywhere; }
-h2.result { border-bottom: 2px solid var(--text); }
+h2.result { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid var(--text); }
+h2.fn { font-size: 21px; margin-top: 28px; }
+h2.fn .arrow { color: var(--muted); font-weight: 400; }
 h3 { font-size: 15px; margin: 20px 0 6px; }
 code, pre, textarea { font-family: var(--mono); font-size: 13px; line-height: 1.5; }
 pre { margin: 0; background: var(--code); padding: 8px 10px; overflow-x: auto; white-space: pre; }
@@ -43,6 +46,7 @@ a { color: var(--accent); }
 .src pre { overflow: visible; background: none; }
 .src .ln { color: var(--muted); text-align: right; user-select: none; border-right: 1px solid var(--rule); padding-right: 8px; }
 pre code.hljs { background: none; padding: 0; color: inherit; }
+p code, li code { background: var(--code); padding: 0 3px; border-radius: 2px; }
 .hljs-keyword, .hljs-type, .hljs-built_in { color: var(--accent); }
 .hljs-number, .hljs-string, .hljs-literal { color: var(--lit); }
 .hljs-comment { color: var(--muted); font-style: italic; }
@@ -50,8 +54,14 @@ pre code.hljs { background: none; padding: 0; color: inherit; }
 
 /* bloklar bo'yicha tushuntirish */
 ol.blocks { padding-left: 1.6em; margin: 0; }
-ol.blocks li { margin: 0 0 16px; }
+ol.blocks li { margin: 0 0 18px; }
 ol.blocks pre { margin: 4px 0; }
+.b-head { font-size: 15px; }
+.b-where { font-size: 13px; white-space: nowrap; }
+.lead { font-size: 16px; margin: 10px 0; }
+.note { border-left: 4px solid var(--warn); padding: 6px 10px; margin: 0 0 14px; color: var(--text); }
+ol.blocks details { margin: 4px 0 0; }
+ol.blocks summary { font-size: 13px; color: var(--muted); }
 .del { color: var(--bad); }
 .add { color: var(--ok); }
 .expl { white-space: pre-line; margin: 4px 0 0; }
@@ -80,7 +90,8 @@ select, input[type=text], input[type=password] { font: inherit; font-size: 14px;
   background: var(--bg); color: var(--text); border-radius: 2px; max-width: 100%; }
 .src-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
 .opts { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 10px 0; }
-.opts label { display: flex; align-items: center; gap: 6px; }
+.opts label { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.opts select { min-width: 0; text-overflow: ellipsis; }
 button, .filebtn { font: inherit; font-size: 14px; border-radius: 2px; cursor: pointer; padding: 6px 14px; min-height: 40px; }
 button[type=submit] { background: var(--accent); color: var(--ink); border: 1px solid var(--accent); font-weight: 600; }
 button[type=submit]:disabled { opacity: .6; cursor: wait; }
@@ -99,6 +110,6 @@ button.link, .filebtn { background: none; border: 1px solid var(--rule); color: 
 @media (max-width: 560px) {
   textarea { min-height: 11em; }
   .opts label { flex: 1 1 100%; }
-  .opts select, .opts input { flex: 1; }
+  .opts select, .opts input { flex: 1; min-width: 0; width: 100%; }
 }
 </style>

@@ -142,7 +142,11 @@ def parse_params(param_str: str) -> list[Param]:
     return params
 
 
+_SIG_ATTRS = re.compile(r"__attribute__\s*\(\(.*?\)\)|__declspec\s*\([^()]*(?:\([^()]*\))?[^()]*\)|@<\w+>")
+
+
 def _parse_signature(sig: str):
+    sig = _SIG_ATTRS.sub(" ", sig)          # __attribute__((noinline)), __declspec(dllexport), IDA `name@<rax>`
     sig_clean = re.sub(_SIG_NOISE, " ", sig)
     sig_clean = re.sub(r"\s+", " ", sig_clean).strip()
     m = re.match(r"^(.*?)\b([A-Za-z_]\w*)\s*\((.*)\)\s*$", sig_clean, flags=re.S)

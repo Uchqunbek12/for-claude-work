@@ -4,12 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deobf Agent</title>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" onload="hljs.highlightAll()"></script>
+<link rel="icon" href="data:,">
+<script defer src="{{ url_for('static', filename='highlight.min.js') }}"></script>
+<script defer src="{{ url_for('static', filename='report.js') }}"></script>
+<script defer src="{{ url_for('static', filename='app.js') }}"></script>
 {% include "_style.html" %}
 </head>
-<body>
+<body data-check-url="{{ url_for('check_key') }}" data-public="{{ 1 if public else 0 }}">
 <main>
 <header><h1>deobf-agent</h1><span>chalkash psevdokodni soddalashtiradi va tushuntiradi</span></header>
+
+{% if public %}<p class="note">Ochiq demo. Offline rejim bepul. Claude uchun o'z kalitingizni kiriting — u saqlanmaydi.
+{% if not native %}Xavfsizlik uchun bu yerda kodingiz serverda ishga tushirilmaydi, shuning uchun natija «Tekshirilmadi» deb belgilanadi
+(to'liq tekshiruv — vositani o'z kompyuteringizda ishlatganda).{% endif %}</p>{% endif %}
 
 <form method="post" action="{{ url_for('analyze') }}#natija" enctype="multipart/form-data" id="form">
   <div class="src-bar">
@@ -24,7 +31,7 @@
 
   <div class="opts">
     <label>Model <select id="engine" name="engine">
-      {% for value, title in engines %}<option value="{{ value }}" {% if form.engine == value %}selected{% endif %}>{{ title }}</option>{% endfor %}
+      {% for value, title in engines %}{% if not (public and value == "custom") %}<option value="{{ value }}" {% if form.engine == value %}selected{% endif %}>{{ title }}</option>{% endif %}{% endfor %}
     </select></label>
     <label id="custom-wrap" {% if form.engine != "custom" %}hidden{% endif %}>Model nomi
       <input type="text" id="custom_model" name="custom_model" value="{{ form.custom_model }}" placeholder="claude-sonnet-5-5" size="18"></label>
@@ -42,9 +49,9 @@
   <div class="actions">
     <button type="submit" id="submit">Tahlil qilish</button>
     <button type="button" id="check" class="link">Kalitni tekshirish</button>
-    <span id="status">{% if public %}Ochiq demo. Offline bepul; Claude uchun o'z kalitingizni kiriting — u saqlanmaydi.{% elif has_key %}API kalit bor.{% else %}API kalit yo'q — faqat Offline ishlaydi.{% endif %}</span>
+    <span id="status">{% if public %}Kalit faqat shu so'rov uchun ishlatiladi va saqlanmaydi.{% elif has_key %}API kalit bor.{% else %}API kalit yo'q — faqat Offline ishlaydi.{% endif %}</span>
   </div>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<p class="error" id="error" role="alert" tabindex="-1">{{ error }}</p>{% endif %}
 </form>
 
 {% if data %}
@@ -54,41 +61,6 @@
 </section>
 {% endif %}
 </main>
-<script>
-  var SAMPLES = {{ samples|tojson }};
-  var $ = function (id) { return document.getElementById(id); };
-  $("sample").addEventListener("change", function (e) {
-    if (SAMPLES[e.target.value]) $("code").value = SAMPLES[e.target.value];
-  });
-  $("file").addEventListener("change", async function (e) {          // fayl matni maydonga yuklanadi
-    var f = e.target.files[0];
-    if (f) { $("code").value = await f.text(); e.target.value = ""; }
-  });
-  $("engine").addEventListener("change", function () {
-    $("custom-wrap").hidden = $("engine").value !== "custom";
-  });
-  $("check").addEventListener("click", async function () {
-    var model = $("engine").value === "custom" ? $("custom_model").value : $("engine").value;
-    var body = new URLSearchParams({model: model});
-    if ($("api_key")) body.append("api_key", $("api_key").value);
-    $("status").className = "";
-    $("status").textContent = "Tekshirilmoqda…";
-    try {
-      var resp = await fetch("{{ url_for('check_key') }}", {method: "POST", body: body});
-      var data = await resp.json();
-      $("status").className = data.ok ? "ok" : "bad";
-      $("status").textContent = data.message;
-    } catch (err) {
-      $("status").className = "bad";
-      $("status").textContent = "Server javob bermadi. Terminal oynasi ochiqmi?";
-    }
-  });
-  $("form").addEventListener("submit", function () {
-    $("submit").disabled = true;
-    $("submit").textContent = "Ishlayapti…";
-    $("status").className = "";
-    $("status").textContent = "1–2 daqiqagacha cho'zilishi mumkin.";
-  });
-</script>
+<script type="application/json" id="samples-data">{{ samples|tojson }}</script>
 </body>
 </html>

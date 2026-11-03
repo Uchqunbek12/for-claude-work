@@ -9,7 +9,7 @@ Har bir namuna uchun:
   * narx, vaqt, urinishlar soni.
 
 Ishga tushirish:  deobf eval --offline          (bepul)
-                  deobf eval --model haiku      (Claude bilan; API kalit kerak)
+                  deobf eval --model sonnet     (Claude bilan; API kalit kerak)
 """
 
 from __future__ import annotations

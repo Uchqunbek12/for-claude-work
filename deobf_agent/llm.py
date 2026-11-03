@@ -3,12 +3,12 @@
 Asosiy tushunchalar:
   * token — model matnni o'qiydigan va yozadigan "bo'lak" (taxminan 3-4 harf).
     API narxi tokenlar soniga qarab hisoblanadi: kirish (input) va chiqish (output) alohida.
-  * model — default "haiku" (Claude Haiku 5.5, eng arzon). --model sonnet / opus bilan
-    kuchliroq modelga bir zumda o'tish mumkin.
+  * model — default "sonnet" (Claude Sonnet 5.5: kuchli va o'rtacha narxda). --model haiku bilan arzonroq,
+    --model opus bilan kuchliroq modelga bir zumda o'tish mumkin.
   * effort — modelning "o'ylash" chuqurligi (low / medium / high). Pastroq = arzonroq va tezroq.
   * structured output — javob aniq sxema (schema.DeobfResult) bo'yicha keladi.
-  * prompt caching — so'rovning o'zgarmas boshlang'ich qismi (ko'rsatmalar) API serverida
-    keshlanadi; keyingi so'rovlarda u ~10 barobar arzon hisoblanadi.
+  * prompt caching — bir suhbatning davomida (tuzatish urinishlarida) so'rovning boshlang'ich qismi
+    API serverida keshlanadi va ~10 barobar arzon hisoblanadi.
   * disk kesh — bir xil kod uchun bir xil so'rovni qayta yubormaymiz: javob diskdan olinadi ($0).
 """
 
@@ -17,9 +17,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import sandbox
 from .prompts import SYSTEM_PROMPT
 from .schema import DeobfResult
 
@@ -28,7 +30,7 @@ MODEL_ALIASES = {
     "sonnet": "claude-sonnet-5-5",
     "opus": "claude-opus-5-5",
 }
-DEFAULT_MODEL = "haiku"
+DEFAULT_MODEL = "sonnet"
 
 # Narxlar: AQSH dollari / 1 million token. (kirish, chiqish, kesh-yozish, kesh-o'qish)
 # Taxminiy qiymatlar — aniq va eng so'nggi narxlar: https://www.anthropic.com/pricing
@@ -129,6 +131,14 @@ def mask_key(key: str | None) -> str:
     return key[:12] + "..." + key[-4:] if len(key) > 20 else "***"
 
 
+_KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}")
+
+
+def _server_key_allowed(api_key: str | None) -> bool:
+    """Public rejimda server kalitiga (.env / muhit) hech qachon tushib ketmaymiz — faqat tashrif buyuruvchining kaliti."""
+    return bool(api_key) or not sandbox.PUBLIC
+
+
 def _api_error_text(exc: Exception, model_id: str, key: str = "") -> str:
     """Claude API xatosini foydalanuvchiga tushunarli o'zbekcha matnga aylantiradi."""
     import anthropic
@@ -139,22 +149,31 @@ def _api_error_text(exc: Exception, model_id: str, key: str = "") -> str:
     if isinstance(exc, anthropic.PermissionDeniedError):
         return f"Kalitga ruxsat yo'q: {exc.message}"
     if isinstance(exc, anthropic.NotFoundError):
-        return f"'{model_id}' modeli topilmadi yoki sizga mavjud emas. Boshqa modelni tanlang (haiku, sonnet, opus)."
+        return f"'{model_id}' modeli topilmadi yoki sizga mavjud emas. Boshqa modelni tanlang (sonnet, haiku, opus)."
     if isinstance(exc, anthropic.RateLimitError):
         return "So'rovlar limiti oshib ketdi (rate limit). Bir oz kutib, qayta urinib ko'ring."
     if isinstance(exc, anthropic.BadRequestError):
         return f"So'rov rad etildi (400): {exc.message}"
     if isinstance(exc, anthropic.APIStatusError):
-        return f"Claude API xatosi ({exc.status_code}): {exc.message}"
+        body = exc.body.get("error") if isinstance(getattr(exc, "body", None), dict) else None
+        detail = (body or {}).get("message") if isinstance(body, dict) else None
+        return f"Claude API xatosi ({exc.status_code}): {detail or exc.message}"
+    if isinstance(exc, anthropic.APITimeoutError):
+        return "Claude serveri javob bermadi (vaqt tugadi). Birozdan so'ng qayta urinib ko'ring."
     if isinstance(exc, anthropic.APIConnectionError):
         return "Claude serveriga ulanib bo'lmadi — internet aloqasini tekshiring."
     return f"Claude API xatosi: {exc}"
 
 
 def make_client(api_key: str | None = None):
-    """Claude mijozini yaratadi. api_key berilmasa — ANTHROPIC_API_KEY (yoki .env) dan olinadi."""
+    """Claude mijozini yaratadi. api_key berilmasa — ANTHROPIC_API_KEY (yoki .env) dan olinadi
+    (public rejimda esa kalit majburiy: server kaliti ishlatilmaydi)."""
     import anthropic
 
+    if not _server_key_allowed(api_key):
+        raise LLMError("Public demoda Claude uchun o'z API kalitingizni kiriting (sk-ant-...).")
+    if api_key and not _KEY_RE.fullmatch(api_key):
+        raise LLMError("API kalit formati noto'g'ri — 'sk-ant-...' bilan boshlanadigan to'liq kalitni kiriting.")
     return anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
 
@@ -167,15 +186,20 @@ def check_api_key(model: str | None = None, client=None, api_key: str | None = N
     import anthropic
 
     model_id = resolve_model(model)
+    if not _server_key_allowed(api_key):
+        return False, "Public demoda kalitni tekshirish uchun o'z API kalitingizni kiriting (sk-ant-...)."
     key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if client is None:
         if not key:
             return False, ("ANTHROPIC_API_KEY topilmadi. Loyiha papkasida .env fayli yarating va unga "
                            "ANTHROPIC_API_KEY=sk-ant-... qatorini yozing.")
-        if not key.startswith("sk-ant-"):
-            return False, f"Kalit 'sk-ant-' bilan boshlanmaydi ({mask_key(key)}) — to'liq nusxalanganini tekshiring."
+        if not _KEY_RE.fullmatch(key):
+            return False, (f"Kalit formati noto'g'ri ({mask_key(key)}): 'sk-ant-' bilan boshlanib, to'liq "
+                           "nusxalanganini tekshiring.")
     try:
         info = (client or make_client(api_key)).models.retrieve(model_id)
+    except LLMError as exc:
+        return False, str(exc)
     except anthropic.AnthropicError as exc:
         return False, _api_error_text(exc, model_id, key)
     name = getattr(info, "display_name", None) or model_id
@@ -234,6 +258,9 @@ class DiskCache:
         self.dir.mkdir(parents=True, exist_ok=True)
         self._path(key).write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
 
+    def delete(self, key: str) -> None:
+        self._path(key).unlink(missing_ok=True)
+
 
 @dataclass
 class ClaudeSession:
@@ -248,9 +275,10 @@ class ClaudeSession:
     max_tokens: int = 16000
     cache: DiskCache | None = None
     client: object = None
-    api_key: str | None = None        # tashrif buyuruvchining o'z kaliti (public rejim); saqlanmaydi
+    api_key: str | None = field(default=None, repr=False)   # tashrif buyuruvchining o'z kaliti; saqlanmaydi
     messages: list = field(default_factory=list)
     usage: UsageStats = field(default_factory=UsageStats)
+    _cache_keys: list = field(default_factory=list, repr=False)
 
     def _client(self):
         if self.client is None:
@@ -259,8 +287,8 @@ class ClaudeSession:
             try:
                 self.client = make_client(self.api_key)
             except anthropic.AnthropicError as exc:
-                raise LLMError(f"Claude API mijozini yaratib bo'lmadi: {exc}. "
-                               "ANTHROPIC_API_KEY ni .env fayliga yozing yoki --offline rejimidan foydalaning.")
+                raise LLMError("Claude API mijozini yaratib bo'lmadi: ANTHROPIC_API_KEY ni .env fayliga yozing "
+                               "yoki --offline rejimidan foydalaning.") from None
         return self.client
 
     def _cache_key(self) -> str:
@@ -274,48 +302,67 @@ class ClaudeSession:
         self.messages.append({"role": "user", "content": user_text})
         key = self._cache_key()
         hit = self.cache.get(key) if self.cache else None
-        if hit:
-            self.usage.cache_hits += 1
-            content, result = hit["content"], DeobfResult.model_validate(hit["result"])
-        else:
-            content, result = self._call_api()
-            if self.cache:
-                self.cache.set(key, {"model": self.model, "content": content, "result": result.model_dump()})
+        try:
+            if hit:
+                self.usage.cache_hits += 1
+                content, result = hit["content"], DeobfResult.model_validate(hit["result"])
+            else:
+                content, result = self._call_api()
+                if self.cache:
+                    self.cache.set(key, {"model": self.model, "content": content, "result": result.model_dump()})
+        except Exception:
+            self.messages.pop()                    # xatoda suhbat tarixida "osilib qolgan" savol qolmasin
+            raise
+        self._cache_keys.append(key)
         self.messages.append({"role": "assistant", "content": content})
         return result
 
+    def forget(self) -> None:
+        """Tekshiruvdan o'tmagan javoblarni keshdan o'chiradi: qayta urinishda xuddi shu xato javob
+        $0 ga "qaytib kelmasligi", model qaytadan javob berishi uchun."""
+        if self.cache:
+            for key in self._cache_keys:
+                self.cache.delete(key)
+        self._cache_keys.clear()
+
     def _call_api(self) -> tuple[list, DeobfResult]:
         import anthropic
+        import pydantic
 
         client = self._client()
         try:
-            response = client.messages.parse(
+            response = client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 system=SYSTEM_PROMPT,
                 messages=self.messages,
-                output_format=DeobfResult,
-                output_config={"effort": self.effort},
-                # Avtomatik prompt keshi: so'rovning oxirgi blokigacha bo'lgan qism keshlanadi,
-                # tuzatish so'rovlarida oldingi suhbat qayta to'liq narxda hisoblanmaydi.
-                extra_body={"cache_control": {"type": "ephemeral"}},
+                # Javob aynan DeobfResult sxemasi bo'yicha keladi (structured output). parse() o'rniga create()
+                # ishlatamiz: javob kesilsa yoki rad etilsa ham sarflangan tokenlar hisobga olinadi va xato
+                # tushunarli LLMError bo'lib chiqadi (aks holda xom ValidationError agentni to'xtatib qo'yardi).
+                output_config={"effort": self.effort,
+                               "format": {"type": "json_schema", "schema": anthropic.transform_schema(DeobfResult)}},
+                # Avtomatik prompt keshi: tuzatish urinishlarida oldingi suhbat qayta to'liq narxda hisoblanmaydi.
+                cache_control={"type": "ephemeral"},
             )
         except anthropic.AnthropicError as exc:
-            raise LLMError(_api_error_text(exc, self.model, self.api_key or os.environ.get("ANTHROPIC_API_KEY", ""))) from exc
+            raise LLMError(_api_error_text(exc, self.model, self.api_key or os.environ.get("ANTHROPIC_API_KEY", ""))) from None
+        except ValueError as exc:
+            raise LLMError(f"So'rovni yuborib bo'lmadi: {exc}. --max-tokens qiymatini kamaytiring.") from None
 
-        self.usage.add_response(response.usage, self.model)
+        self.usage.add_response(response.usage, self.model)       # avval narx: keyingi xatolarda ham hisobga olinadi
         if response.stop_reason == "refusal":
-            detail = ""
-            if response.stop_details is not None:
-                detail = f" ({getattr(response.stop_details, 'category', '') or ''})"
-            raise LLMError(f"Model so'rovni bajarishdan bosh tortdi{detail}. Boshqa model bilan urinib "
-                           "ko'ring (--model sonnet) yoki offline rejimdan foydalaning.")
+            category = getattr(response.stop_details, "category", None) if response.stop_details is not None else None
+            hint = (" Zararli dastur tahlilida bu tez-tez uchraydi." if category == "cyber" else "")
+            raise LLMError(f"Model xavfsizlik qoidalari tufayli so'rovni bajarmadi{f' ({category})' if category else ''}."
+                           f"{hint} Boshqa model (--model opus) bilan urinib ko'ring yoki offline rejimdan foydalaning.")
         if response.stop_reason == "max_tokens":
-            raise LLMError("Javob token limitiga yetib kesildi. --max-tokens qiymatini oshiring yoki "
-                           "funksiyani kichikroq qismlarga bo'ling.")
-        result = response.parsed_output
-        if result is None:
-            raise LLMError("Model javobini sxema bo'yicha o'qib bo'lmadi.")
+            raise LLMError("Javob token limitiga yetib kesildi. Funksiyani kichikroq qismlarga bo'ling "
+                           "yoki --effort low bilan urinib ko'ring.")
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        try:
+            result = DeobfResult.model_validate_json(text)
+        except pydantic.ValidationError:
+            raise LLMError("Model javobini sxema bo'yicha o'qib bo'lmadi.") from None
         # Javobni tarixga qo'shish uchun JSON ko'rinishiga o'tkazamiz (thinking bloklari ham saqlanadi —
         # keyingi tuzatish so'rovida ular o'zgarishsiz qaytarilishi kerak).
         content = [b.model_dump(mode="json", exclude_none=True) for b in response.content]
