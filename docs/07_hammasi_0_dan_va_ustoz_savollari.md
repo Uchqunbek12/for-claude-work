@@ -12,7 +12,7 @@
 | Vaqtingiz | Nima o'qiysiz |
 |---|---|
 | **2 daqiqa** | 0-bo'lim («Bir gapda» va «30 soniyalik javob») |
-| **15 daqiqa** | 0, 1, 2, 4-bo'limlar + 13-bo'limning «eng ko'p so'raladigan 10 savol» qismi |
+| **15 daqiqa** | 0, 1, 2, 4-bo'limlar + 13-bo'limdagi ★ belgili 14 ta savol |
 | **Hammasini tushunish** | boshidan oxirigacha; 6-bo'lim (funksiyalar xaritasi) ni kompyuter oldida kod bilan birga o'qing |
 
 ## Mundarija
@@ -756,7 +756,7 @@ o'lchangan.)*
 ## 13. Ustoz savollari va javoblari
 
 Har bir javob **qisqa variant** (og'zaki aytish uchun) va kerak bo'lsa **chuqurroq** qismdan iborat. Savollar guruhlangan.
-Eng ko'p so'raladigan 10 tasi **★** bilan belgilangan.
+Eng ko'p so'raladigan 14 tasi **★** bilan belgilangan (jami 51 ta savol).
 
 ### A. Mavzu va umumiy savollar
 
