@@ -847,3 +847,14 @@ qiymat ishlatiladi; haqiqiy kod faqat Render'ning maxfiy sozlamasida bo'ladi.
 **Ochiq cheklovlar:** 4 xonali kod kuchsiz (uzunroq qo'yish va Anthropic'da oylik limit belgilash tavsiya etiladi);
 tekshirilayotgan kod huquqsiz bo'lsa ham tarmoqqa chiqa oladi va yadro izolyatsiyasi (gVisor/VM) yo'q — faqat ishonchli
 kishilar kod yuborsin; haqiqiy Render joylashi va `docker build` bu yerda ishga tushirilmagan.
+
+### 11.1. Haqiqiy API sinovi (lokalda, Claude Sonnet 5.5)
+
+Foydalanuvchi o'z kalitini berdi va "Sonnet qo'yib lokalda ishlatib ko'raylik" dedi. Kalit faqat vaqtincha, cheklangan
+huquqli faylda saqlandi, natijalarda ko'rsatilmadi, repozitoriyga yozilmadi va sinovdan keyin o'chirildi. Natija (batafsil:
+`docs/baholash_claude_sonnet.md`): `deobf check` — kalit va `claude-sonnet-5-5` ishlayapti; 5 funksiya (gcd, checksum, rotl32,
+rot_hash, bubble_sort) hammasi **1-urinishda «Tasdiqlandi»**, narx $0.024–0.039 (o'rtacha ≈ $0.032), 15–24 s; `rot_hash`
+yordamchini asl nomi bilan chaqirdi; Web UI da «Kalitni tekshirish» tugmasi va natija sahifasi (Chromium) to'g'ri ishladi.
+Shu bilan 10-bosqichdagi "Claude rejimi sinalmagan" da'vosi kichik tanlamada tasdiqlandi. **Cheklov:** tanlama kichik; xato tuzatish
+sikli va zararli kodda rad etish haqiqiy Claude bilan ko'rilmagan. **Xavfsizlik:** kalit chat yozuvida qolgani uchun uni sinovdan
+keyin bekor qilib, yangisini yaratish tavsiya etildi.

@@ -53,7 +53,7 @@ ba'zan kunlar oladi.
 | | Offline (bepul) | Claude (pullik) |
 |---|---|---|
 | Kim soddalashtiradi | oldindan yozilgan qoidalar (Python) | sun'iy intellekt (Claude Sonnet 5.5) |
-| Narx | $0 | taxminan $0.03–0.07 / funksiya (o'lchanmagan baho) |
+| Narx | $0 | ≈ $0.03 / funksiya (5 ta funksiyada o'lchangan: $0.024–0.039) |
 | Kuchli tomoni | tez, bepul, har doim bir xil natija | mazmunli nom beradi, murakkabroq kodni tushunadi |
 | Zaif tomoni | faqat tanish shakllarni biladi | ba'zan xato qiladi — shuning uchun tekshiruv bor |
 
@@ -468,7 +468,7 @@ obrazlar bir oiladan (bozor / retsept / dala / xat). **Test** (`tests/test_narra
 o'zi dastlab xom kod (`*((char*)&v3+...)`) oddiy tilga sizib chiqayotganini topdi.
 
 **Cheklov (halol):** offline rejim faqat **tanish shakllarni** nomlaydi; boshqasini umumiy gap bilan tushuntiradi. Claude rejimi
-moslashuvchan, lekin uning sifati haqiqiy API bilan **hali o'lchanmagan**.
+moslashuvchan. Sifati haqiqiy API bilan 5 funksiyada ko'rildi: hammasi 1-urinishda tasdiqlandi (kichik tanlama, 10.5-bo'lim).
 
 ### 6.10. Hisobot (`report.py`)
 
@@ -597,7 +597,23 @@ parametri kabi), **5 tasi** `compile_error` (C++ nomlari `Crypto::mix`, Ghidra'n
 mijoz bilan), agent, differensial test (audit topgan holatlar bilan), tushuntirish sifati, Web UI va xavfsizlik, audit
 regressiyalari.
 
-### 10.4. Brauzer sinovi
+### 10.4. Claude Sonnet 5.5 — haqiqiy API bilan o'lchov
+
+Kalit bilan lokalda 5 funksiya tahlil qilindi (to'liq jadval: `docs/baholash_claude_sonnet.md`):
+
+| Funksiya | Natija | Narx | Vaqt | Claude bergan nom |
+|---|---|---|---|---|
+| `gcd` | Tasdiqlandi, 1-urinishda | $0.0345 | 23 s | `gcd` |
+| `checksum` | Tasdiqlandi, 1-urinishda | $0.0392 | 24 s | `fnv1a_checksum` |
+| `rotl32` | Tasdiqlandi, 1-urinishda | $0.0256 | 15 s | `rotate_left_32` |
+| `rot_hash` | Tasdiqlandi, 1-urinishda | $0.0346 | 20 s | `rot_hash` |
+| `bubble_sort` (Web UI) | Tasdiqlandi (1690 test), 1-urinishda | $0.0243 | 24 s | `bubble_sort` |
+
+O'rtacha ≈ $0.032 / funksiya. **Ma'nosi:** offline (qoidalar) va Claude bir xil natijaga — tasdiqlangan toza kodga — keldi,
+lekin Claude mazmunli nom beradi va tushuntirishni funksiyaga moslab yozadi. **Cheklov:** tanlama kichik; xato tuzatish
+sikli (hamma natija 1-urinishda to'g'ri chiqdi) va zararli kodda rad etish haqiqiy Claude bilan ko'rilmagan.
+
+### 10.5. Brauzer sinovi
 
 UI Chromium'da kompyuter (1280 px) va telefon (390 px) o'lchamida tekshirildi: forma yuboriladi, "Oddiy tilda" tugmasi
 ishlaydi, kod ranglanadi, gorizontal skroll yo'q, konsolda xato yo'q.
@@ -720,7 +736,7 @@ ko'rmaganman. Lekin API yo'li ochiq ekani tasdiqlandi: soxta kalit bilan so'rov 
 |---|---|
 | Kalit qo'yilganmi? | **Yo'q** — kalit faqat sizda. Uni Render'ga **siz** kiritasiz (12.2, 3-qadam). Men uni ko'ra ham, yozib ham olmayman, GitHub'ga ham tushmaydi. |
 | Nega kalitni menga yubormang? | Kalit — parol: u orqali sizning pulingiz sarflanadi. Chat yozuvlari saqlanadi. Maxfiy qiymat faqat Render'ning maxfiy sozlamasida turishi kerak. |
-| Claude rejimi sinalganmi? | Kalitsiz zanjir (so'rov → javobni o'qish → tekshiruv → hisobot) soxta mijoz bilan sinalgan; haqiqiy javob sifati va narx ($0.03–0.07/funksiya) — **taxminiy**. |
+| Claude rejimi sinalganmi? | **Ha, lokalda haqiqiy kalit bilan**: 5 funksiya, hammasi 1-urinishda «Tasdiqlandi», narx $0.024–0.039 (10.4-bo'lim). Render ustida hali ishlatilmagan. |
 | Offline rejim kalit kerakmi? | Yo'q. Bepul va kalitsiz ishlaydi. |
 
 ### Kalitni tekshirish
@@ -741,7 +757,7 @@ Quyidagilar **hujjatlarda ochiq aytilgan** va ustoz so'rasa, yashirmasdan javob 
 | Chaqiruv argumenti ichidagi MBA | `f((a^b)+2*(a&b))` ichidagi ifoda soddalashtirilmaydi. |
 | C++ nomlari, ba'zi Ghidra `CONCAT` | Kompilyatsiya bo'lmaydi. |
 | Virtualizatsiya (VMProtect) | Loyiha doirasidan tashqarida. |
-| **Claude rejimi sinalmagan** | Faqat soxta mijoz bilan. Haqiqiy sifat va narx noma'lum. |
+| **Claude rejimi kichik tanlamada sinalgan** | 5 funksiya, 4 namuna. Xato tuzatish sikli va zararli kodda rad etish haqiqiy Claude bilan ko'rilmagan. |
 | **`docker build` ishga tushirilmagan** | Qadamlar qayta ishlab ko'rilgan, haqiqiy build emas. |
 | Ochiq demo (kodsiz) kodni ishga tushirmaydi | Xavfsizlik uchun «Tekshirilmadi». To'liq tekshiruv — yopiq demoda (kirish kodi bilan) yoki lokal. |
 | 4 xonali kirish kodi kuchsiz | Cheklovlar va byudjet bilan himoyalangan, lekin imkonsiz emas: uzunroq kod qo'yish va Anthropic'da oylik limit belgilash tavsiya etiladi. |
@@ -800,7 +816,7 @@ chiqadi. Ya'ni loyiha to'liq ishlaydi; xavfsizlik darajasini kimga ochilganiga q
 Sifat va narx o'rtasidagi muvozanat: Sonnet kuchliroq, Haiku ~20 baravar arzon. Ikkalasi bir tugma bilan almashtiriladi.
 
 **6. Narx qancha?**
-Taxminan $0.03–0.07 / funksiya (Sonnet). Bu **o'lchanmagan baho** — haqiqiy API bilan sinalmagan. Offline — bepul.
+≈ $0.03 / funksiya (Sonnet): 5 ta funksiyada haqiqiy API bilan o'lchangan $0.024–0.039. Haiku ~20 baravar arzon. Offline — bepul.
 
 **7. Obfuskatsiyaning qaysi turlari yechiladi?**
 MBA, soxta shart, oddiy tekislash, kodlangan satr/konstanta, o'lik kod. Virtualizatsiya (VMProtect) — yo'q.

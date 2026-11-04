@@ -58,7 +58,7 @@ o'zbek tilida tushuntiradigan va natijaning to'g'riligini **avtomatik tekshiradi
 - Statik tahlil topilmalari **tasodifiy test bilan isbotlanadi** va LLM'ga "tasdiqlangan fakt"
   sifatida beriladi. Bu modelning ishini osonlashtiradi va narxni kamaytiradi.
 - Flattening holatlar mashinasini graf tahlili orqali **LLM'siz** yechish algoritmi ishlab chiqildi.
-- Talaba va kichik jamoalar uchun **arzon**: standart model Sonnet 5.5 (taxminan $0.03–0.07/funksiya), arzonroq Haiku 5.5 va bepul offline rejim.
+- Talaba va kichik jamoalar uchun **arzon**: standart model Sonnet 5.5 (o'lchangan ≈ $0.03/funksiya), arzonroq Haiku 5.5 va bepul offline rejim.
 
 ---
 
@@ -233,11 +233,11 @@ Obfuskatsiyalangan versiya `gcc -O0` bilan kompilyatsiya qilinib, **angr** dekom
 \* angr dekompilyatorining xatosi (5.5-bo'lim).
 
 ### 5.4. Natijalar: LLM rejimi
-Ishlab chiqish muhitida Claude API kaliti bo'lmagani sababli LLM rejimi **mazkur hisobot yozilgan vaqtda
-o'lchanmagan**. Agent siklining mantiqi (xatoni aniqlash → qarshi misollar bilan qayta so'rash → tuzatish)
-soxta mijoz yordamida avtomatik testlar bilan tekshirilgan. Haqiqiy o'lchash buyrug'i:
-`deobf eval --model sonnet -o docs/baholash_sonnet.md` (8 namuna uchun taxminiy narx $0.3–0.6; hali o'lchanmagan).
-Natijalar olingach, shu bo'limga qo'shiladi.
+Ishlab chiqish davomida Claude kaliti bo'lmagani uchun LLM rejimi avval faqat soxta mijoz bilan sinalgan. Keyinchalik
+haqiqiy kalit bilan **Claude Sonnet 5.5** 5 ta funksiyada o'lchandi (`docs/baholash_claude_sonnet.md`): hammasi 1-urinishda
+«Tasdiqlandi», narx $0.024–0.039 (o'rtacha ≈ $0.032), vaqt 15–24 s, kod murakkabligi masalan 9 → 2 (checksum), 16 → 5
+(bubble_sort). Tanlama kichik (5 funksiya, 4 namuna): xato tuzatish sikli haqiqiy Claude bilan ko'rilmadi (hammasi birinchi
+urinishda to'g'ri chiqdi). To'liq baholash: `deobf eval --model sonnet -o docs/baholash_sonnet.md` (8 namuna, taxminan $0.3).
 
 ### 5.5. Muhim kuzatuvlar
 1. **Dekompilyator ham xato qiladi.** angr `(u*u + u) % 2 == 0` sharti (har doim rost)ni
@@ -266,7 +266,7 @@ public rejim xavfsizligi, audit regressiyalari. Natija: **101/101 o'tdi**.
 | Tasodifiy test — isbot emas | SMT-yechuvchi (Z3) bilan formal ekvivalentlik isboti |
 | Unflatten faqat oddiy holatlar mashinasi uchun | dominatorlar daraxtiga asoslangan to'liq tuzilma tiklash algoritmi |
 | Virtualizatsiya (VMProtect) qo'llab-quvvatlanmaydi | loyiha doirasidan tashqarida |
-| LLM rejimi (Sonnet 5.5) haqiqiy API bilan hali o'lchanmagan: sifat va narx taxminiy | API kalit bilan `deobf eval --model sonnet` |
+| LLM rejimi 5 funksiyada o'lchangan (kichik tanlama); xato tuzatish sikli va rad etish (`cyber`) haqiqiy Claude bilan ko'rilmagan | to'liq `deobf eval --model sonnet`, zararli kod namunalari |
 | IDA/Ghidra eksport skriptlari sinab ko'rilmagan | IDA/Ghidra o'rnatilgan kompyuterda sinash |
 | Psevdokod funksiyalararo tahlil qilinmaydi | chaqiruv grafi bo'yicha ketma-ket tahlil |
 
@@ -282,7 +282,7 @@ yo'naltiriladi. Shu tufayli vosita oddiy chatbot emas, balki **o'z natijasini te
 Test namunalarida LLM'siz offline rejim ham barcha usullarni aniqladi (100%), 5/5 natijaning psevdokodga
 ekvivalentligini isbotladi va tsiklomatik murakkablikni 54% ga kamaytirdi. Ish davomida dekompilyatorning
 o'zi ham xato qilishi mumkinligi aniqlandi va tekshiruv bunday holatlarni ochib berdi. Vosita talabalar uchun
-arzon: standart Sonnet modeli bilan bitta funksiya tahlili taxminan $0.03–0.07 turadi (Haiku bilan ~20 baravar arzon), takroriy tahlil esa bepul.
+arzon: standart Sonnet modeli bilan bitta funksiya tahlili o'lchangan ≈ $0.03 turadi (Haiku bilan ~20 baravar arzon), takroriy tahlil esa bepul.
 
 ---
 

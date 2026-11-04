@@ -41,7 +41,8 @@ bir topilma va butun funksiya uchun **o'xshatishli, atamasiz** izoh ham tayyorla
   nima qilishini aytsin, `simple` maydoni bo'sh bo'lmasin va kodni takrorlamasin, atamani butun javobda bir marta
   tushuntirsin, oddiy kod uchun ham o'xshatishlar: o'zgaruvchi — yorliqli idish, tsikl — savatdagi har bir mevaga bir xil
   ish, shart — yo'l ayrilishi va h.k.). Bu jonliroq, lekin pullik. **Eslatma:** Claude rejimining matn sifati haqiqiy API
-  bilan hali o'lchanmagan (kalit bo'lmagani uchun faqat soxta mijoz bilan sinalgan).
+  bilan 5 ta funksiyada ko'rildi (`docs/baholash_claude_sonnet.md`): oddiy tildagi matnlar kod belgilarisiz va tushunarli chiqdi;
+  tanlama kichik.
 
 Ikkala holatda ham o'xshatishlar **bir xil obrazlar oilasidan** olingan (bozor, oshxona/retsept, dala, xat/qulf).
 

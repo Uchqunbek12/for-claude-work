@@ -88,7 +88,7 @@ python -m pytest -q
 ## 3. Claude API kalitini olish (bir martalik)
 
 1. <https://console.anthropic.com> saytida ro'yxatdan o'ting.
-2. **Billing** bo'limida balansni to'ldiring (minimal summa yetarli: Sonnet bilan 1 ta funksiya taxminan **$0.03–0.07**, ya'ni $5 ga ~100 ta funksiya; Haiku bilan ancha arzon).
+2. **Billing** bo'limida balansni to'ldiring (minimal summa yetarli: Sonnet bilan 1 ta funksiya taxminan **$0.03** (o'lchangan: $0.024–0.039), ya'ni $5 ga ~150 ta funksiya; Haiku bilan ancha arzon).
 3. **API Keys → Create Key** — kalitni nusxalang (`sk-ant-...`). Kalit faqat bir marta ko'rsatiladi.
 4. **`2_kalit_kiritish.bat`** ni ishga tushiring va kalitni joylang. Fayl `.env` ni o'zi yaratadi
    va kalitni tekshiradi.
@@ -182,14 +182,14 @@ qaysi birini ishlatishni **tanlaysiz**:
 
 | Model | Qisqa nomi | Narx (1 funksiya) | Qachon ishlatish |
 |---|---|---|---|
-| Claude Sonnet 5.5 | `sonnet` | taxminan $0.03–0.07 | **standart** — kuchli va o'rtacha narxda |
+| Claude Sonnet 5.5 | `sonnet` | ≈ $0.03 (o'lchangan: $0.024–0.039) | **standart** — kuchli va o'rtacha narxda |
 | Claude Haiku 5.5 | `haiku` | taxminan $0.002–0.005 | arzonroq: oddiy funksiyalar, ko'p sinov uchun |
 | Claude Opus 5.5 | `opus` | taxminan $0.06–0.15 | eng murakkab funksiyalar uchun |
 | Offline | `--offline` | $0 | API kalitsiz: statik tahlil va qoidalarga asoslangan tushuntirish |
 
-> Narxlar **taxminiy va hali o'lchanmagan** (API kalit bilan haqiqiy sinov o'tkazilmagan): model "o'ylashi" ham
-> chiqish tokeni sifatida hisoblanadi, shuning uchun narx funksiya murakkabligiga va `--effort` ga bog'liq.
-> Aniq narx har bir hisobotda ko'rsatiladi.
+> **Sonnet** narxi haqiqiy API bilan 5 ta funksiyada o'lchangan (`medium` effort; `docs/baholash_claude_sonnet.md`). Haiku va Opus
+> narxlari taxminiy. Model "o'ylashi" ham chiqish tokeni sifatida hisoblanadi, shuning uchun murakkabroq kodda yoki
+> `--effort high` da narx oshadi. Aniq narx har bir hisobotda ko'rsatiladi.
 
 Tanlash usullari:
 - **Web UI:** "Model (dvigatel)" ro'yxatidan tanlang. Ro'yxatda bo'lmagan boshqa Claude modelini

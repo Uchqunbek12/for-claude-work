@@ -92,7 +92,7 @@ Repozitoriyadagi `Dockerfile` va `render.yaml` tayyor. GitHub'da asosiy (default
   foydalanuvchi ajratish, kirish kodi, to'liq tekshiruv) shu Linux muhitida **xuddi shu sozlamalar bilan** qayta ishlab
   ko'rilgan va ishlagan.
 * Render ustidagi haqiqiy ishga tushirishni faqat siz qila olasiz: unda hisobingiz kerak.
-* Claude'ning haqiqiy javobi (matn sifati, narx) haqiqiy kalit bilan hali ko'rilmagan.
+* Claude haqiqiy kalit bilan lokal sinaldi (5 funksiya, `docs/baholash_claude_sonnet.md`); Render ustida esa Claude hali ishlatilmagan.
 
 ---
 

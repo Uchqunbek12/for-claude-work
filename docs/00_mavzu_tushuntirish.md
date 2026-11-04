@@ -144,7 +144,7 @@ vosita va uni himoyada namoyish qilish uchun hamma narsa.
 7. **Hujjatlar o'zbek tilida**: har qadam nima uchun qilingani (jurnal), foydalanish yo'riqnomasi (IDA Free va Ghidra bilan qadam-baqadam), amaliy qism hisoboti.
 
 ### Narx haqida (talaba uchun)
-1 ta funksiya tahlili taxminan (o'lchanmagan baho): **Sonnet 5.5 ≈ $0.03–0.07**, Haiku 5.5 ≈ $0.002–0.005, Opus 5.5 ≈ $0.06–0.15.
+1 ta funksiya tahlili taxminan: **Sonnet 5.5 ≈ $0.03** (5 ta funksiyada o'lchangan: $0.024–0.039), Haiku 5.5 ≈ $0.002–0.005, Opus 5.5 ≈ $0.06–0.15.
 Ya'ni $5 kredit bilan Sonnet'da **yuzlab**, Haiku'da **minglab** funksiyani tahlil qilish mumkin.
 API kalitni <https://console.anthropic.com> saytidan olasiz (buni foydalanish yo'riqnomasida batafsil yozaman).
 

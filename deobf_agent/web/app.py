@@ -36,7 +36,7 @@ from ..agent import AgentConfig, deobfuscate_text
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINES = [
-    ("sonnet", "Claude Sonnet 5.5 (tavsiya) — taxminan $0.03–0.07 / funksiya"),
+    ("sonnet", "Claude Sonnet 5.5 (tavsiya) — taxminan $0.03 / funksiya"),
     ("haiku", "Claude Haiku 5.5 — arzonroq, taxminan $0.002–0.005"),
     ("opus", "Claude Opus 5.5 — eng kuchli, taxminan $0.06–0.15"),
     ("offline", "Offline — bepul, Claude'siz"),
