@@ -878,3 +878,14 @@ Foydalanuvchi saytni «deobfuskatsiya» deb nomlashni so'radi. Sahifadagi standa
 `render.yaml` dagi servis nomi shunga o'zgartirildi. Ichki nomlar (paket `deobf_agent`, buyruq `deobf`) o'zgarmadi: ular
 faqat kod ichida ko'rinadi. Havola `https://deobfuskatsiya.onrender.com` bo'lishi uchun mavjud servisning nomi Render'da
 Settings → Name orqali o'zgartiriladi (nom band bo'lmasa).
+
+### 11.4. «Kalit har doim ulangan» (sahifa kalitni so'ramaydi va uni tekshirib ko'rsatadi)
+
+Foydalanuvchi: Render yangilandi, sayt ishladi, lekin sahifa hamon «kalitingiz» deb so'rayapti; kod bilan kirish bo'lsin, kalit esa doim ulangan tursin.
+
+* **Sabab:** server kaliti ulangan bo'lsa ham sahifada «Sizning kalitingiz (ixtiyoriy)» maydoni ko'rinib turardi; kalit topilmasa esa «o'z kalitingizni kiriting» deyilardi. Ikkala holat ham «kalit ulanmagan» degan taassurot berardi.
+* **Tuzatish (yopiq demo):** kalit serverda bo'lsa, maydon umuman ko'rsatilmaydi; sahifa ochilishi bilan kalit Anthropic'da (Models API, bepul) tekshiriladi va natija yoziladi («Server kaliti ulangan. Kalit ishlayapti — model mavjud: …»). Javob serverda 10 daqiqa eslab qolinadi (xato bo'lsa 30 soniya), shuning uchun sahifa har ochilganda Anthropic'ga so'rov ketmaydi va pul sarflanmaydi.
+* **Kalit topilmasa:** sahifa qizil blokda sababini aytadi va o'xshash nomli o'zgaruvchilarni (faqat NOMLARINI, qiymatini emas) ko'rsatadi: nom xato yozilgan bo'lsa shu yerda ko'rinadi.
+* **Nusxalash xatosi:** Render'ga kalit tirnoq, bo'shliq yoki yangi qator bilan joylangan bo'lsa, endi ular olib tashlanadi (`llm.server_api_key()`), aks holda to'g'ri kalit ham rad etilardi.
+* Kirish kodi esa kodda yozilmaydi (u ommaviy repoda ko'rinib qolardi): Render'dagi `DEOBF_ACCESS_CODE` da turadi.
+* 5 ta yangi test (jami 122), sahifa haqiqiy brauzerda (Playwright) tekshirildi: kalit bor/yo'q ikkala holat.

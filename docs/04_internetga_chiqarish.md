@@ -100,7 +100,8 @@ O'zgartirgandan keyin Render servisni qayta ishga tushiradi (yoki **Manual Deplo
 
 | Belgi | Sabab va yechim |
 |---|---|
-| Kirgandan keyin ham «Serverda API kalit topilmadi… o'z kalitingizni kiriting» | Render → Environment da `ANTHROPIC_API_KEY` yo'q yoki nomi boshqacha yozilgan. To'g'ri nom: `ANTHROPIC_API_KEY`. |
+| Kirgandan keyin qizil blok «Serverda Claude kaliti ulanmagan» va «Sizning kalitingiz» maydoni chiqadi | Render → Environment da `ANTHROPIC_API_KEY` yo'q, bo'sh yoki nomi boshqacha yozilgan (sahifa o'xshash nomlarni o'zi ko'rsatadi). To'g'ri nom: `ANTHROPIC_API_KEY`. Saqlagach Render servisni o'zi qayta ishga tushiradi. |
+| Kalit maydoni yo'q, lekin pastda qizil «Kalit noto'g'ri yoki bekor qilingan» | Kalit Render'ga ulangan, lekin Anthropic uni qabul qilmayapti: console.anthropic.com da kalit o'chirilgan/bekor qilingan yoki to'liq nusxalanmagan. Yangi kalit yarating va `ANTHROPIC_API_KEY` qiymatini almashtiring. |
 | «Server kodni ishga tushirmaydi… Tekshirilmadi» | Render konteynerda kodni alohida foydalanuvchi nomidan ishga tushirishga ruxsat bermadi (log'da «OGOHLANTIRISH» bor). Claude va Offline ishlayveradi, faqat gcc + test o'chadi. |
 | Kod yozilganda ham kirmaydi / «Juda ko'p noto'g'ri urinish» | Noto'g'ri urinishlar cheklovi (IP: 15 daqiqada 5 ta). Biroz kuting. |
 | Servis ishga tushmaydi, log'da `DEOBF_USE_SERVER_KEY ... DEOBF_ACCESS_CODE` | `DEOBF_USE_SERVER_KEY=1` yozilgan, lekin `DEOBF_ACCESS_CODE` bo'sh. Kodni yozing (yoki `DEOBF_USE_SERVER_KEY` ni olib tashlang). |

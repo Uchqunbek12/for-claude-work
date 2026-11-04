@@ -10,17 +10,23 @@
 <script defer src="{{ url_for('static', filename='app.js') }}"></script>
 {% include "_style.html" %}
 </head>
-<body data-check-url="{{ url_for('check_key') }}" data-public="{{ 1 if public else 0 }}">
+<body data-check-url="{{ url_for('check_key') }}" data-public="{{ 1 if public else 0 }}" data-status-url="{{ url_for('server_status') }}" data-auto-check="{{ 1 if (gated and server_key) else 0 }}">
 <main>
 <header><h1>{{ site_name }}</h1><span>chalkash psevdokodni soddalashtiradi va tushuntiradi</span>
 {% if gated %}<form method="post" action="{{ url_for('logout') }}" style="margin-left:auto"><button type="submit" class="link" style="min-height:32px;padding:2px 10px">Chiqish</button></form>{% endif %}</header>
 
 {% if gated %}<p class="note">Yopiq demo: kod bilan kirdingiz.
-{% if server_key %}Claude server kaliti bilan ishlaydi (kunlik byudjet cheklangan); xohlasangiz o'z kalitingizni ham kiritishingiz mumkin.{% else %}Serverda API kalit topilmadi (Render → Environment → ANTHROPIC_API_KEY), shuning uchun Claude uchun o'z kalitingizni kiriting.{% endif %}
+{% if server_key %}Claude serverga ulangan kalit bilan ishlaydi — o'zingiz hech narsa kiritmaysiz (kunlik byudjet cheklangan).{% endif %}
 {% if native %}Kodingiz serverda huquqsiz alohida foydalanuvchi nomidan kompilyatsiya qilinib sinab ko'riladi (to'liq tekshiruv).{% else %}Server kodni ishga tushirmaydi, shuning uchun natija «Tekshirilmadi» deb belgilanadi.{% endif %}</p>
 {% elif public %}<p class="note">Ochiq demo. Offline rejim bepul. Claude uchun o'z kalitingizni kiriting — u saqlanmaydi.
 {% if not native %}Xavfsizlik uchun bu yerda kodingiz serverda ishga tushirilmaydi, shuning uchun natija «Tekshirilmadi» deb belgilanadi
 (to'liq tekshiruv — vositani o'z kompyuteringizda ishlatganda).{% endif %}</p>{% endif %}
+
+{% if gated and not server_key %}<p class="error" role="alert"><b>Serverda Claude kaliti ulanmagan.</b> Render → servis → Environment bo'limida
+<code>ANTHROPIC_API_KEY</code> nomli o'zgaruvchi yo'q yoki bo'sh. Nomi aynan shunday (katta harflar, pastki chiziqlar) bo'lishi va qiymati
+<code>sk-ant-…</code> kaliti bo'lishi kerak; saqlagach servis o'zi qayta ishga tushadi.
+{% if similar_vars %}Shunga o'xshash nomlar topildi: <code>{{ similar_vars | join(", ") }}</code> — nomi xato yozilgan bo'lishi mumkin.{% endif %}
+Hozircha Offline rejim ishlaydi; Claude uchun pastdagi maydonga vaqtincha o'z kalitingizni yozishingiz mumkin.</p>{% endif %}
 
 <form method="post" action="{{ url_for('analyze') }}#natija" enctype="multipart/form-data" id="form">
   <div class="src-bar">
@@ -46,14 +52,14 @@
       {% for v, t in [("uz", "O'zbekcha"), ("ru", "Русский"), ("en", "English")] %}<option value="{{ v }}" {% if form.lang == v %}selected{% endif %}>{{ t }}</option>{% endfor %}
     </select></label>
     <label>Funksiya <input type="text" id="function" name="function" value="{{ form.function }}" placeholder="hammasi" size="12"></label>
-    {% if public %}<label id="key-wrap">Sizning kalitingiz{% if server_key %} (ixtiyoriy){% endif %}
+    {% if public and not (gated and server_key) %}<label id="key-wrap">Sizning kalitingiz{% if server_key %} (ixtiyoriy){% endif %}
       <input type="password" id="api_key" name="api_key" autocomplete="off" placeholder="sk-ant-..." size="18"></label>{% endif %}
   </div>
 
   <div class="actions">
     <button type="submit" id="submit">Tahlil qilish</button>
-    <button type="button" id="check" class="link">Kalitni tekshirish</button>
-    <span id="status">{% if public and server_key %}Server kaliti ulangan.{% elif public %}Kalit faqat shu so'rov uchun ishlatiladi va saqlanmaydi.{% elif has_key %}API kalit bor.{% else %}API kalit yo'q — faqat Offline ishlaydi.{% endif %}</span>
+    <button type="button" id="check" class="link">{% if gated and server_key %}Claude ulanishini tekshirish{% else %}Kalitni tekshirish{% endif %}</button>
+    <span id="status">{% if public and server_key %}Server kaliti ulangan.{% elif gated %}Server kaliti topilmadi — faqat Offline ishlaydi.{% elif public %}Kalit faqat shu so'rov uchun ishlatiladi va saqlanmaydi.{% elif has_key %}API kalit bor.{% else %}API kalit yo'q — faqat Offline ishlaydi.{% endif %}</span>
   </div>
   {% if error %}<p class="error" id="error" role="alert" tabindex="-1">{{ error }}</p>{% endif %}
 </form>

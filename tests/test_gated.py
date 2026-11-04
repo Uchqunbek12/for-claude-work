@@ -91,11 +91,11 @@ def test_logged_in_user_can_use_server_key_and_daily_budget_stops_it(gated, monk
     assert "byudjeti tugadi" not in offline                                                    # offline baribir ishlaydi
 
 
-def test_without_server_key_flag_a_logged_in_user_still_needs_own_key(gated):
+def test_without_server_key_flag_claude_is_refused_with_the_real_cause(gated):
     c = gated().test_client()
     login(c)
     html = c.post("/analyze", data={"code": S1, "engine": "sonnet"}).get_data(as_text=True)
-    assert "API kalitingizni kiriting" in html
+    assert "Claude kaliti ulanmagan" in html and "ANTHROPIC_API_KEY" in html
 
 
 def test_native_needs_access_code_and_isolation_when_server_key_is_used(monkeypatch):
@@ -182,3 +182,51 @@ def test_site_name_is_configurable(gated, monkeypatch):
     login(c)
     html = c.get("/").get_data(as_text=True)
     assert "<title>Kod Ochar</title>" in html and "<h1>Kod Ochar</h1>" in html
+
+
+def test_with_server_key_the_page_has_no_key_field_and_says_claude_is_connected(gated, monkeypatch):
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", True)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-SERVERKEYSERVERKEY1234567890")
+    c = gated().test_client()
+    login(c)
+    html = c.get("/").get_data(as_text=True)
+    assert 'id="api_key"' not in html and "Sizning kalitingiz" not in html          # foydalanuvchidan kalit so'ralmaydi
+    assert "Claude serverga ulangan kalit bilan ishlaydi" in html and "Server kaliti ulangan" in html
+
+
+def test_without_server_key_the_page_names_the_cause_and_misspelled_variables(gated, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_KEY", "sk-ant-api03-SECRETVALUESECRETVALUE1234")    # nomi xato yozilgan holat
+    c = gated().test_client()
+    login(c)
+    html = c.get("/").get_data(as_text=True)
+    assert "Serverda Claude kaliti ulanmagan" in html and "ANTHROPIC_KEY" in html     # xato nom ko'rsatiladi
+    assert "SECRETVALUE" not in html                                                   # qiymat hech qachon ko'rsatilmaydi
+    err = c.post("/analyze", data={"code": S1, "engine": "sonnet"}).get_data(as_text=True)
+    assert "ANTHROPIC_API_KEY" in err and "API kalitingizni kiriting" not in err
+
+
+def test_server_status_checks_the_key_once_and_remembers_the_answer(gated, monkeypatch):
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", True)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-SERVERKEYSERVERKEY1234567890")
+    fake = FakeClient()
+    c = gated(CLIENT=fake).test_client()
+    assert c.get("/api/server-status").status_code == 401                              # kodsiz yopiq
+    login(c)
+    first = c.get("/api/server-status").get_json()
+    assert first["ok"] is True and "Kalit ishlayapti" in first["message"]
+    c.get("/api/server-status"); c.get("/api/server-status")
+    assert len(fake.models.calls) == 1                                                 # har ochilishda Anthropic'ga bormaydi
+
+
+def test_server_status_reports_a_missing_key_without_calling_anthropic(gated, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    c = gated(CLIENT=FakeClient()).test_client()
+    login(c)
+    assert c.get("/api/server-status").get_json()["ok"] is False
+
+
+def test_key_copied_into_render_with_quotes_or_newline_still_works(monkeypatch):
+    from deobf_agent import llm
+    monkeypatch.setenv("ANTHROPIC_API_KEY", ' "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUV"\n')
+    assert llm.server_api_key() == "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUV"

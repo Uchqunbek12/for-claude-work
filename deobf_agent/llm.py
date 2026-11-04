@@ -166,6 +166,12 @@ def _api_error_text(exc: Exception, model_id: str, key: str = "") -> str:
     return f"Claude API xatosi: {exc}"
 
 
+def server_api_key() -> str:
+    """Muhit o'zgaruvchisidagi (Render, .env) kalit. Nusxalashda qo'shilib qoladigan bo'shliq, yangi qator va
+    tirnoqlar olib tashlanadi: aks holda to'g'ri kalit ham «yaroqsiz» bo'lib chiqadi."""
+    return os.environ.get("ANTHROPIC_API_KEY", "").strip().strip("'\"").strip()
+
+
 def make_client(api_key: str | None = None):
     """Claude mijozini yaratadi. api_key berilmasa — ANTHROPIC_API_KEY (yoki .env) dan olinadi
     (public rejimda esa kalit majburiy: server kaliti ishlatilmaydi)."""
@@ -175,7 +181,8 @@ def make_client(api_key: str | None = None):
         raise LLMError("Public demoda Claude uchun o'z API kalitingizni kiriting (sk-ant-...).")
     if api_key and not _KEY_RE.fullmatch(api_key):
         raise LLMError("API kalit formati noto'g'ri — 'sk-ant-...' bilan boshlanadigan to'liq kalitni kiriting.")
-    return anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+    key = api_key or server_api_key()
+    return anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
 
 
 def check_api_key(model: str | None = None, client=None, api_key: str | None = None) -> tuple[bool, str]:
@@ -189,7 +196,7 @@ def check_api_key(model: str | None = None, client=None, api_key: str | None = N
     model_id = resolve_model(model)
     if not _server_key_allowed(api_key):
         return False, "Public demoda kalitni tekshirish uchun o'z API kalitingizni kiriting (sk-ant-...)."
-    key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    key = api_key or server_api_key()
     if client is None:
         if not key:
             return False, ("ANTHROPIC_API_KEY topilmadi. Loyiha papkasida .env fayli yarating va unga "
@@ -346,7 +353,7 @@ class ClaudeSession:
                 cache_control={"type": "ephemeral"},
             )
         except anthropic.AnthropicError as exc:
-            raise LLMError(_api_error_text(exc, self.model, self.api_key or os.environ.get("ANTHROPIC_API_KEY", ""))) from None
+            raise LLMError(_api_error_text(exc, self.model, self.api_key or server_api_key())) from None
         except ValueError as exc:
             raise LLMError(f"So'rovni yuborib bo'lmadi: {exc}. --max-tokens qiymatini kamaytiring.") from None
 

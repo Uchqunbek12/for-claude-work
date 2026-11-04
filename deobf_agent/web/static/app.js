@@ -32,6 +32,13 @@
       $("status").textContent = "Server javob bermadi. Terminal oynasi ochiqmi?";
     }
   });
+  if (document.body.dataset.autoCheck === "1") {      // serverdagi kalit ishlayaptimi — sahifa ochilishi bilan ko'rsatiladi
+    $("status").textContent = "Claude ulanishi tekshirilmoqda…";
+    fetch(document.body.dataset.statusUrl).then(function (r) { return r.json(); }).then(function (data) {
+      $("status").className = data.ok ? "ok" : "bad";
+      $("status").textContent = data.ok ? "Server kaliti ulangan. " + data.message : data.message;
+    }).catch(function () { $("status").textContent = "Server kaliti ulangan."; });
+  }
   $("form").addEventListener("submit", function () {
     $("submit").disabled = true;
     $("submit").textContent = "Ishlayapti…";
