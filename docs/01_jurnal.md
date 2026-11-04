@@ -899,3 +899,14 @@ Foydalanuvchi: kirganda kod so'ramayapti; kalit saytga biriktirilib, doim ulanga
 * **«Demo» so'zi** sahifalardan, xato xabarlaridan va hujjatlardan olib tashlandi; yopiq rejimdagi ortiqcha eslatma («kod bilan kirdingiz…») ham olib tashlandi, faqat kerak bo'lganda («Tekshirilmadi» sababi) qoladi.
 * **Test muhiti:** `tests/conftest.py` ga har testdan keyin `os.environ` ni tiklaydigan fixture qo'shildi (`load_dotenv` testi kalitni keyingi testlarga qoldirib ketayotgan edi). Jami 123 test.
 * Jonli saytni (`*.onrender.com`) tekshirib bo'lmadi: ikkala nom ham `no-server` qaytardi (nom o'zgargan bo'lishi mumkin); xulosa kod va mahalliy takrorlash bo'yicha.
+
+### 11.6. Yakuniy tushuntirish hujjati (`docs/07`)
+
+Foydalanuvchi: Render'ga kod qo'shildi va sayt ishladi; endi hamma narsani 0 dan tushuntiradigan hujjat kerak (qayerda qaysi funksiya ishlatilgani,
+nima bo'lgani, iboralar izohi, mavzu nomini qayta ko'rib chiqish, ustoz berishi mumkin bo'lgan savollar).
+
+`docs/07_hammasi_0_dan_va_ustoz_savollari.md` yozildi (15 bo'lim): mavzu nomini so'zma-so'z tahlil (har so'z qanchalik bajarilgani, «agent» so'zi va
+deobfuskatsiya/dekompilyatsiya farqi), 0 dan hikoya, atamalar lug'ati, haqiqiy misol (`s1_mba`, `s3_flatten`) qadamma-qadam, **funksiyalar xaritasi**
+(haqiqiy funksiya nomlari; hujjatdagi har bir `modul.funksiya` havolasi koddan avtomatik tekshirildi: 104 tasi topildi), Claude va tekshiruv qismlari,
+xavfsizlik va Render (to'rt muammo va yechim), xronologiya, natijalar, cheklovlar, **ustoz uchun 50 dan ortiq savol-javob**, namoyish rejasi va nosozliklar jadvali.
+`docs/06` eskirgan joylari haqida eslatma qo'shildi. `Dockerfile` izohi yangi (avtomatik yoqish) holatga moslandi.

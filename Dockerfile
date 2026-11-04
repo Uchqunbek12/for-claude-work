@@ -1,13 +1,13 @@
 # Internetga chiqarish uchun konteyner.
 #
-# Standart (xavfsiz) holat: DEOBF_PUBLIC=1 — begona odamlar uchun ochiq demo: kod ishga tushirilmaydi, kalit serverda yo'q.
-# Yopiq demo (render.yaml shu holatni sozlaydi): DEOBF_ACCESS_CODE (kirish kodi) bilan birga DEOBF_NATIVE=1 va
-# DEOBF_USE_SERVER_KEY=1 — shunda tekshirilayotgan kod (gcc + differensial test) quyidagi huquqsiz "sandbox"
-# foydalanuvchisi nomidan ishlaydi; server esa root bo'lib qoladi: sandbox foydalanuvchisi serverning muhit
-# o'zgaruvchilarini (API kalit) va xotirasini o'qiy olmaydi. Docker qurish vaqtida hech qanday maxfiy qiymat yo'q.
+# Standart (xavfsiz) holat: DEOBF_PUBLIC=1 — hammaga ochiq sayt: kod ishga tushirilmaydi, kalit serverda yo'q.
+# Yopiq sayt (render.yaml shu holatni sozlaydi): DEOBF_ACCESS_CODE (kirish kodi) va ANTHROPIC_API_KEY berilsa, server kaliti va
+# to'liq tekshiruv AVTOMATIK yoqiladi: tekshirilayotgan kod (gcc + differensial test) quyidagi huquqsiz "sandbox" foydalanuvchisi
+# nomidan ishlaydi; server esa root bo'lib qoladi: sandbox foydalanuvchisi serverning muhit o'zgaruvchilarini (API kalit) va
+# xotirasini o'qiy olmaydi. Docker qurish vaqtida hech qanday maxfiy qiymat yo'q.
 FROM python:3.12-slim
 
-# gcc — kodni kompilyatsiya qilib sinash uchun (faqat DEOBF_NATIVE=1 bo'lganda ishlatiladi)
+# gcc — kodni kompilyatsiya qilib sinash uchun (to'liq tekshiruv yoqilganda ishlatiladi)
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 

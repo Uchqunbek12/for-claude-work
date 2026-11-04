@@ -1,5 +1,8 @@
 # 06. Loyiha to'liq tushuntirish — 0 dan oxirigacha
 
+> **Eslatma (2026-11-04):** yangi va to'liqroq variant: [07_hammasi_0_dan_va_ustoz_savollari.md](07_hammasi_0_dan_va_ustoz_savollari.md). Bu hujjatda
+> test soni (102 → hozir 123) va joylash holati («Render'da hali joylanmagan» → hozir joylangan) eskirgan; qolgan mazmuni to'g'ri.
+
 > **Bu hujjat kim uchun.** Siz (talaba) ustozingizga loyihani ko'rsatishingiz va **har bir qarorni himoya qila olishingiz**
 > kerak. Shuning uchun bu yerda faqat "nima qildik" emas, balki har bir narsa uchun **"nima bu?"**, **"nega kerak?"** va
 > **"qaysi faylning vazifasi?"** degan savollarga javob berilgan. Bir narsani tushunmasangiz — pastdagi 2-bo'limdagi
