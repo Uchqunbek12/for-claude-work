@@ -61,7 +61,7 @@ bo'yicha tekshiruv emas. To'liq tekshiruv uchun vositani o'z kompyuteringizda is
 
 Repozitoriyadagi `Dockerfile` va `render.yaml` tayyor.
 
-1. Kodingizni GitHub'ga joylang (bu repozitoriya allaqachon GitHub'da).
+1. Kodingizni GitHub'ga joylang (bu repozitoriya allaqachon GitHub'da; uning asosiy branchi `claude/vibrant-heisenberg-teie45`, alohida `main` yo'q — Render shuni o'zi oladi).
 2. [render.com](https://render.com) da ro'yxatdan o'ting, GitHub hisobingizni ulang.
 3. **New → Blueprint** tanlang va shu repozitoriyani ko'rsating. Render `render.yaml` ni o'qib,
    `DEOBF_PUBLIC=1` va `DEOBF_TRUSTED_PROXIES=1` bilan Docker servisini yaratadi.
