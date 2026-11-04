@@ -16,7 +16,7 @@ S1 = (ROOT / "samples/decompiled/s1_mba.angr.c").read_text()
 def test_index_page_lists_samples():
     client = create_app().test_client()
     html = client.get("/").get_data(as_text=True)
-    assert "deobf-agent" in html and "s3_flatten" in html and "Claude Haiku 5.5" in html
+    assert "deobfuskatsiya" in html and "s3_flatten" in html and "Claude Haiku 5.5" in html
 
 
 def test_analyze_offline_and_download(tmp_path):

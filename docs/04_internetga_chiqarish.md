@@ -93,7 +93,7 @@ O'zgartirgandan keyin Render servisni qayta ishga tushiradi (yoki **Manual Deplo
 
 ### 3.3.1. Sayt nomi va havola
 
-* **Sahifadagi nom** (sarlavha va tepada): Render → Environment → `DEOBF_SITE_NAME` (masalan, `Kod Ochar`). Bo'sh bo'lsa `deobf-agent`.
+* **Sahifadagi nom** (sarlavha va tepada): Render → Environment → `DEOBF_SITE_NAME` (masalan, `Kod Ochar`). Bo'sh bo'lsa `deobfuskatsiya`.
 * **Havola nomi** (`https://<nom>.onrender.com`): Render → servis → **Settings → Name**. Havola shu nomdan olinadi; band bo'lmasa o'zgaradi.
 
 ### 3.3.2. Muammolar

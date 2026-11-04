@@ -7,7 +7,7 @@
 #   ANTHROPIC_API_KEY  — sizning Claude API kalitingiz (sk-ant-...)
 services:
   - type: web
-    name: deobf-agent
+    name: deobfuskatsiya
     runtime: docker
     plan: free
     healthCheckPath: /healthz

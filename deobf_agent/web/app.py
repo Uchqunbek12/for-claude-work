@@ -152,7 +152,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxies, x_proto=1, x_host=0)
     app.jinja_env.globals.update(report.TEMPLATE_GLOBALS)
-    app.jinja_env.globals["site_name"] = os.environ.get("DEOBF_SITE_NAME", "").strip() or "deobf-agent"   # sozlanadi
+    app.jinja_env.globals["site_name"] = os.environ.get("DEOBF_SITE_NAME", "").strip() or "deobfuskatsiya"   # sozlanadi
     app.jinja_env.filters["rich"] = report.rich
     results: OrderedDict[str, tuple] = OrderedDict()     # oxirgi natijalar (yuklab olish uchun)
     samples = _load_samples()

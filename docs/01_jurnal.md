@@ -871,3 +871,10 @@ Foydalanuvchi saytni Render'ga joyladi (servisni qo'lda yaratib, Environment'ga 
    ikki maydon yetadi: `DEOBF_ACCESS_CODE`, `ANTHROPIC_API_KEY`. Kalit topilmasa, sahifa sababini aniq yozadi.
 2. **Nom:** sahifadagi nom `DEOBF_SITE_NAME` muhit o'zgaruvchisi bilan o'zgartiriladi (kodga tegmasdan); havola nomi Render'da
    Settings → Name orqali.
+
+### 11.3. Nom: «deobfuskatsiya»
+
+Foydalanuvchi saytni «deobfuskatsiya» deb nomlashni so'radi. Sahifadagi standart nom (`DEOBF_SITE_NAME` bo'sh bo'lganda) va
+`render.yaml` dagi servis nomi shunga o'zgartirildi. Ichki nomlar (paket `deobf_agent`, buyruq `deobf`) o'zgarmadi: ular
+faqat kod ichida ko'rinadi. Havola `https://deobfuskatsiya.onrender.com` bo'lishi uchun mavjud servisning nomi Render'da
+Settings → Name orqali o'zgartiriladi (nom band bo'lmasa).
