@@ -131,3 +131,11 @@ def test_full_differential_test_works_when_code_runs_as_unprivileged_user(monkey
     a = "int f(int x) { return x * 2; }"
     assert harness.differential_test(a, "f", "int f(int x) { return x + x; }", "f", "int", ["int"]).status == "equivalent"
     assert harness.differential_test(a, "f", "int f(int x) { return x + x + 1; }", "f", "int", ["int"]).status == "mismatch"
+
+
+def test_model_picker_is_available_after_login(gated):
+    c = gated().test_client()
+    login(c)
+    html = c.get("/").get_data(as_text=True)
+    for value in ("sonnet", "haiku", "opus", "offline", "custom"):          # yopiq demoda "Boshqa model" ham bor
+        assert f'<option value="{value}"' in html

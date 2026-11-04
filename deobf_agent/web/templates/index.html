@@ -35,7 +35,7 @@
 
   <div class="opts">
     <label>Model <select id="engine" name="engine">
-      {% for value, title in engines %}{% if not (public and value == "custom") %}<option value="{{ value }}" {% if form.engine == value %}selected{% endif %}>{{ title }}</option>{% endif %}{% endfor %}
+      {% for value, title in engines %}{% if not (public and not gated and value == "custom") %}<option value="{{ value }}" {% if form.engine == value %}selected{% endif %}>{{ title }}</option>{% endif %}{% endfor %}
     </select></label>
     <label id="custom-wrap" {% if form.engine != "custom" %}hidden{% endif %}>Model nomi
       <input type="text" id="custom_model" name="custom_model" value="{{ form.custom_model }}" placeholder="claude-sonnet-5-5" size="18"></label>
