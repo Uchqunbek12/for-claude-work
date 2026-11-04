@@ -889,3 +889,13 @@ Foydalanuvchi: Render yangilandi, sayt ishladi, lekin sahifa hamon «kalitingiz�
 * **Nusxalash xatosi:** Render'ga kalit tirnoq, bo'shliq yoki yangi qator bilan joylangan bo'lsa, endi ular olib tashlanadi (`llm.server_api_key()`), aks holda to'g'ri kalit ham rad etilardi.
 * Kirish kodi esa kodda yozilmaydi (u ommaviy repoda ko'rinib qolardi): Render'dagi `DEOBF_ACCESS_CODE` da turadi.
 * 5 ta yangi test (jami 122), sahifa haqiqiy brauzerda (Playwright) tekshirildi: kalit bor/yo'q ikkala holat.
+
+### 11.5. Kirish kodi qo'yilmagan holat va «demo» yozuvlari
+
+Foydalanuvchi: kirganda kod so'ramayapti; kalit saytga biriktirilib, doim ulangan tursin; boshqalar ishlatib yuborishidan xavotir; «demo» yozuvlari kerak emas.
+
+* **Topilma:** sayt kod so'ramasa, Render'da `DEOBF_ACCESS_CODE` yo'q (men uni qo'yilgan deb faraz qilgan edim, bu xato). Kodsiz sayt ochiq rejimda ishlaydi, ochiq rejimda esa server kaliti atayin ishlatilmaydi: shuning uchun «o'z kalitingizni kiriting» chiqardi. Ya'ni kalitdan hech kim foydalana olmagan, xavfsizlik chegarasi ishlagan; muammo faqat sozlashda edi.
+* **Tuzatish:** serverda kalit bor, lekin kirish kodi yo'q bo'lsa, sayt endi ochiq qolmaydi: 503 va «Sayt hali yopilmagan» sahifasi chiqadi (nima qilish 3 qadamda yozilgan). `/healthz` ishlayveradi (Render tekshiruvi). Kalitsiz ochiq rejim oldingidek ishlaydi.
+* **«Demo» so'zi** sahifalardan, xato xabarlaridan va hujjatlardan olib tashlandi; yopiq rejimdagi ortiqcha eslatma («kod bilan kirdingiz…») ham olib tashlandi, faqat kerak bo'lganda («Tekshirilmadi» sababi) qoladi.
+* **Test muhiti:** `tests/conftest.py` ga har testdan keyin `os.environ` ni tiklaydigan fixture qo'shildi (`load_dotenv` testi kalitni keyingi testlarga qoldirib ketayotgan edi). Jami 123 test.
+* Jonli saytni (`*.onrender.com`) tekshirib bo'lmadi: ikkala nom ham `no-server` qaytardi (nom o'zgargan bo'lishi mumkin); xulosa kod va mahalliy takrorlash bo'yicha.

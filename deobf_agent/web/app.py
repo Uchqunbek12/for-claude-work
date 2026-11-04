@@ -147,6 +147,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         if sandbox.native_allowed():
             limits["n_tests"] = 2000                       # to'liq tekshiruv yoqilgan: shaxsiy rejimdagidek
     server_key = bool(llm.server_api_key()) and (not public or sandbox.USE_SERVER_KEY)
+    # Kalit bor, kirish kodi yo'q: sayt "yopiq" bo'lishi kerak edi, lekin hammaga ochiq turibdi. Jimgina ochiq qoldirmaymiz.
+    needs_code = public and not gated and bool(llm.server_api_key())
     budget = Budget(app.config["DAILY_BUDGET_USD"] if sandbox.USE_SERVER_KEY else None)
     app.secret_key = os.environ.get("DEOBF_SESSION_SECRET") or secrets.token_hex(32)
     # Render kabi proksi orqasida haqiqiy mijoz IP'si kerak: ishonchli proksilar soni DEOBF_TRUSTED_PROXIES (standart 0)
@@ -179,6 +181,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         if app.config["LOCAL_ONLY"] and not app.config["PUBLIC"] and request.host.rsplit(":", 1)[0] not in LOCAL_HOSTS \
                 and request.host not in LOCAL_HOSTS:
             abort(403)
+        if needs_code and request.endpoint not in ("healthz", "static"):
+            return render_template("setup.html"), 503
         if gated and request.endpoint not in ("login", "healthz", "static") and not session.get("ok"):
             if request.path.startswith("/api/"):
                 return jsonify(ok=False, message="Avval kirish kodini kiriting."), 401
@@ -256,7 +260,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             return page(form=shown, error=f"Matn juda uzun (ko'pi bilan {limits['max_chars']:,} belgi) — "
                         "bitta yoki bir nechta funksiyani kiriting.")
         if public and _has_include(form["code"]):
-            return page(form=shown, error="Public demoda `#include` qatorlari qo'llab-quvvatlanmaydi — "
+            return page(form=shown, error="Bu saytda `#include` qatorlari qo'llab-quvvatlanmaydi — "
                         "faqat funksiyaning o'zini joylang (turlar avtomatik qo'shiladi).")
         engine = form["engine"] or ("offline" if (public and not server_key) else "sonnet")
         if engine == "custom":

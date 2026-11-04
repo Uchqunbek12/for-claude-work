@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sozlash kerak — {{ site_name }}</title>
+<link rel="icon" href="data:,">
+{% include "_style.html" %}
+</head>
+<body>
+<main style="max-width: 640px">
+<header><h1>{{ site_name }}</h1></header>
+<p class="error" role="alert"><b>Sayt hali yopilmagan: kirish kodi qo'yilmagan.</b></p>
+<p>Serverda sizning Claude kalitingiz (<code>ANTHROPIC_API_KEY</code>) bor, lekin <code>DEOBF_ACCESS_CODE</code> yo'q.
+Kodsiz sayt hammaga ochiq bo'lardi, shuning uchun u to'xtatib qo'yildi va kalit ishlatilmayapti.</p>
+<p><b>Nima qilish kerak (1 daqiqa):</b></p>
+<ol>
+  <li>Render → servisingiz → <b>Environment</b> → <b>Add Environment Variable</b>.</li>
+  <li>Nomi: <code>DEOBF_ACCESS_CODE</code> (aynan shunday), qiymati: o'zingiz tanlagan kod.</li>
+  <li><b>Save Changes</b>. Render servisni o'zi qayta ishga tushiradi (1–2 daqiqa), keyin sahifani yangilang.</li>
+</ol>
+<p class="muted">Shundan keyin sayt kodni so'raydi, kirgach esa Claude kalitingiz bilan ishlaydi va hech narsa kiritmaysiz.
+Saytni hammaga ochiq qilmoqchi bo'lsangiz, <code>ANTHROPIC_API_KEY</code> ni Render'dan o'chiring.</p>
+</main>
+</body>
+</html>

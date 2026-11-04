@@ -62,7 +62,7 @@ ba'zan kunlar oladi.
 (61 ta funksiya) noto'g'ri natija (mismatch) 0 ta.
 
 **Qanday ishlaydi.** Web sahifa (brauzerda) va buyruq qatori (terminalda) ikkalasi bor. Internetga chiqarish uchun
-tayyorlangan: **yopiq demo** (kirish kodi bilan, Claude sizning kalitingiz bilan, to'liq tekshiruv) — lekin Render'da
+tayyorlangan: **yopiq rejim** (kirish kodi bilan, Claude sizning kalitingiz bilan, to'liq tekshiruv) — lekin Render'da
 **hali joylanmagan**, buni faqat siz qila olasiz (12-bo'limga qarang).
 
 **Eng muhim halol gap.** Loyihaning oxirgi bosqichida 5 ta mustaqil "tekshiruvchi" kodni sinab chiqdi va bizning
@@ -503,7 +503,7 @@ Har bir bosqich alohida **commit** (saqlash nuqtasi) sifatida GitHub'da. Batafsi
 | **9. Mukammallashtirish** | Bufer/ko'p funksiya/tashqi chaqiruv bilan ishlash; 3 yangi namuna; UI qayta dizayn; "dehqoncha"; public rejim; Dockerfile. | Siz so'ragan: murakkabroq kod, sodda UI, hamma tushunsin, internetga chiqarish. | Chromium, Docker |
 | **10. Mustaqil audit va tuzatishlar** | 5 mustaqil agent kodni sindi; topilgan xatolar tuzatildi; Sonnet 5.5; aniq jumlali bloklar; brauzer sinovi; hujjatlar. | "Xato ketgan joying bormi?" degan savolingiz. Natija — 9-bo'lim. | agentlar, Playwright |
 | **11. Joylashga tayyorlik** | Joylash qadamlari qayta ishlab tekshirildi, to'liq tushuntirish (shu hujjat) yozildi. | Ustozga ko'rsatish. | — |
-| **12. Yopiq demo** | Siz so'radingiz: "loyiha ishlashi kerak, saytga parol bilan kiradigan qil, API'imni serverga qo'y". Kirish kodi, server kaliti (kunlik byudjet bilan), to'liq tekshiruv alohida huquqsiz foydalanuvchi nomidan, urinishlar cheklovi, 10 ta yangi test. | Ochiq demo "Tekshirilmadi" bo'lib, demo uchun yaroqsiz edi; kirish kodi xavf modelini o'zgartiradi, shuning uchun to'liq ishlashni xavfsiz yoqish mumkin. | Flask sessiya, Docker, Playwright |
+| **12. Yopiq rejim** | Siz so'radingiz: "loyiha ishlashi kerak, saytga parol bilan kiradigan qil, API'imni serverga qo'y". Kirish kodi, server kaliti (kunlik byudjet bilan), to'liq tekshiruv alohida huquqsiz foydalanuvchi nomidan, urinishlar cheklovi, 10 ta yangi test. | Ochiq rejim "Tekshirilmadi" bo'lib, demo uchun yaroqsiz edi; kirish kodi xavf modelini o'zgartiradi, shuning uchun to'liq ishlashni xavfsiz yoqish mumkin. | Flask sessiya, Docker, Playwright |
 
 ---
 
@@ -657,20 +657,20 @@ emasligini** ko'rsatdi: cheklovlar *resursni* chegaralaydi, lekin dasturni boshq
 
 ---
 
-### 11.4. Yopiq demo: nega endi kod ishga tushadi va loyiha to'liq ishlaydi
+### 11.4. Yopiq rejim: nega endi kod ishga tushadi va loyiha to'liq ishlaydi
 
 **Savol, ko'pchilik so'raydi:** "11.2 da kod ishga tushmaydi, natija «Tekshirilmadi» dedingiz. Loyiha ishlamasa, u nima
 uchun kerak?"
 
 **Javob — vaziyatga bog'liq:**
 
-* Havolani **hamma** ochishi mumkin bo'lsa (ochiq demo), begona odam zararli kod yuborishi mumkin. Shuning uchun u yerda
+* Havolani **hamma** ochishi mumkin bo'lsa (ochiq rejim), begona odam zararli kod yuborishi mumkin. Shuning uchun u yerda
   tekshiruv o'chirilgan: bu *xavfsizlik uchun to'langan narx*.
 * Havolani faqat **siz va ustoz** ishlatsangiz, vaziyat boshqa: kodni faqat **kirish kodini bilganlar** yuboradi. Shuning
-  uchun **yopiq demo** yaratdik: kirish kodi bilan kirgach, hamma narsa **to'liq** ishlaydi — Claude (sizning kalitingiz bilan),
+  uchun **yopiq rejim** yaratdik: kirish kodi bilan kirgach, hamma narsa **to'liq** ishlaydi — Claude (sizning kalitingiz bilan),
   gcc kompilyatsiyasi va differensial test, «Tasdiqlandi» natijasi.
 
-**Yopiq demo qanday himoyalanadi** (har bir qatlam va uning sababi):
+**Yopiq rejim qanday himoyalanadi** (har bir qatlam va uning sababi):
 
 | Qatlam | Nima | Nega |
 |---|---|---|
@@ -760,9 +760,9 @@ Quyidagilar **hujjatlarda ochiq aytilgan** va ustoz so'rasa, yashirmasdan javob 
 | Virtualizatsiya (VMProtect) | Loyiha doirasidan tashqarida. |
 | **Claude rejimi kichik tanlamada sinalgan** | 5 funksiya, 4 namuna. Xato tuzatish sikli va zararli kodda rad etish haqiqiy Claude bilan ko'rilmagan. |
 | **`docker build` ishga tushirilmagan** | Qadamlar qayta ishlab ko'rilgan, haqiqiy build emas. |
-| Ochiq demo (kodsiz) kodni ishga tushirmaydi | Xavfsizlik uchun «Tekshirilmadi». To'liq tekshiruv — yopiq demoda (kirish kodi bilan) yoki lokal. |
+| Ochiq rejim (kodsiz) kodni ishga tushirmaydi | Xavfsizlik uchun «Tekshirilmadi». To'liq tekshiruv — yopiq rejimda (kirish kodi bilan) yoki lokal. |
 | 4 xonali kirish kodi kuchsiz | Cheklovlar va byudjet bilan himoyalangan, lekin imkonsiz emas: uzunroq kod qo'yish va Anthropic'da oylik limit belgilash tavsiya etiladi. |
-| Yopiq demoda kod serverda ishga tushadi | Huquqsiz foydalanuvchi nomidan, lekin tarmoq va umumiy yadro izolyatsiyasi (gVisor/VM kabi) yo'q: faqat ishonchli kishilarga kod bering. |
+| Yopiq rejimda kod serverda ishga tushadi | Huquqsiz foydalanuvchi nomidan, lekin tarmoq va umumiy yadro izolyatsiyasi (gVisor/VM kabi) yo'q: faqat ishonchli kishilarga kod bering. |
 | Dekompilyator xatolari | angr ba'zan o'zi xato qiladi (2/8 namuna); vosita psevdokodni etalon deb oladi. |
 
 ---

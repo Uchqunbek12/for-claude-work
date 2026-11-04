@@ -178,7 +178,7 @@ def make_client(api_key: str | None = None):
     import anthropic
 
     if not _server_key_allowed(api_key):
-        raise LLMError("Public demoda Claude uchun o'z API kalitingizni kiriting (sk-ant-...).")
+        raise LLMError("Claude uchun o'z API kalitingizni kiriting (sk-ant-...).")
     if api_key and not _KEY_RE.fullmatch(api_key):
         raise LLMError("API kalit formati noto'g'ri — 'sk-ant-...' bilan boshlanadigan to'liq kalitni kiriting.")
     key = api_key or server_api_key()
@@ -195,7 +195,7 @@ def check_api_key(model: str | None = None, client=None, api_key: str | None = N
 
     model_id = resolve_model(model)
     if not _server_key_allowed(api_key):
-        return False, "Public demoda kalitni tekshirish uchun o'z API kalitingizni kiriting (sk-ant-...)."
+        return False, "Kalitni tekshirish uchun o'z API kalitingizni kiriting (sk-ant-...)."
     key = api_key or server_api_key()
     if client is None:
         if not key:

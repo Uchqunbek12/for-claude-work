@@ -105,7 +105,7 @@ def verify(parsed: ParsedInput, func: FunctionInfo, c_code: str, n_tests: int = 
 def _verify(parsed: ParsedInput, func: FunctionInfo, c_code: str, n_tests: int) -> VerifyReport:
     if compiler.find_compiler() is None:
         if not sandbox.native_allowed():
-            return VerifyReport("no_compiler", details="Public demoda xavfsizlik uchun foydalanuvchi kodi ishga tushirilmaydi. "
+            return VerifyReport("no_compiler", details="Bu saytda xavfsizlik uchun foydalanuvchi kodi ishga tushirilmaydi. "
                                                        "To'liq tekshiruv (gcc + test) uchun vositani o'z kompyuteringizda ishlating.")
         return VerifyReport("no_compiler", details="gcc yoki clang topilmadi — natija tekshirilmadi")
 

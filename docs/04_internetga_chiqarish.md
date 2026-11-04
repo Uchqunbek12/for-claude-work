@@ -2,7 +2,7 @@
 
 Bu yo'riqnoma vositani internetga — havola orqali ochiladigan manzilga — qanday qo'yishni tushuntiradi.
 
-> **Qisqasi.** Siz uchun mo'ljallangan variant — **yopiq demo**: saytga faqat **kirish kodi** bilan kiriladi; kirganlar
+> **Qisqasi.** Siz uchun mo'ljallangan variant — **yopiq rejim**: saytga faqat **kirish kodi** bilan kiriladi; kirganlar
 > uchun Claude **sizning API kalitingiz** bilan ishlaydi (kunlik byudjet chegarasi bilan) va kod **to'liq tekshiriladi**
 > (gcc + differensial test). Ya'ni loyiha to'liq ishlaydi, lekin kodni bilmagan odam hech narsa qila olmaydi.
 > Ustoz va o'zingiz kodni ishlatasiz.
@@ -11,7 +11,7 @@ Bu yo'riqnoma vositani internetga — havola orqali ochiladigan manzilga — qan
 
 ## 1. Uch rejim
 
-| | Shaxsiy (kompyuteringizda) | Ochiq demo (kodsiz, hamma uchun) | **Yopiq demo** (kod bilan) |
+| | Shaxsiy (kompyuteringizda) | Ochiq rejim (kodsiz, hamma uchun) | **Yopiq rejim** (kod bilan) |
 |---|---|---|---|
 | Yoqilishi | `deobf web` | `DEOBF_PUBLIC=1` | `DEOBF_PUBLIC=1` + `DEOBF_ACCESS_CODE=<kod>`; server kaliti va to'liq tekshiruv **avtomatik** yoqiladi (kalit `ANTHROPIC_API_KEY` bo'lsa) |
 | Kim kiradi | faqat siz | hamma | kodni biladiganlar |
@@ -19,15 +19,15 @@ Bu yo'riqnoma vositani internetga — havola orqali ochiladigan manzilga — qan
 | Kod ishga tushiriladimi (to'liq tekshiruv) | ha | **yo'q** → «Tekshirilmadi» | **ha**, alohida huquqsiz foydalanuvchi nomidan (ajratish ishlasa) |
 | Cheklovlar | yumshoq | qattiq | qattiq + kunlik Claude byudjeti |
 
-**Nega «ochiq demo»da «Tekshirilmadi» chiqadi, yopiq demoda esa yo'q?** Tekshiruv kodni *ishga tushiradi*. Kodni hamma
-yuborishi mumkin bo'lsa, begona odam zararli kod yuborishi mumkin — shuning uchun ochiq demoda ishga tushirilmaydi.
-Yopiq demoda kodni faqat parolni bilganlar yuboradi, shuning uchun to'liq tekshiruvni yoqish mumkin.
+**Nega «ochiq rejim»da «Tekshirilmadi» chiqadi, yopiq rejimda esa yo'q?** Tekshiruv kodni *ishga tushiradi*. Kodni hamma
+yuborishi mumkin bo'lsa, begona odam zararli kod yuborishi mumkin — shuning uchun ochiq rejimda ishga tushirilmaydi.
+Yopiq rejimda kodni faqat parolni bilganlar yuboradi, shuning uchun to'liq tekshiruvni yoqish mumkin.
 
 ---
 
-## 2. Xavfsizlik: yopiq demoda nimalar himoya qiladi
+## 2. Xavfsizlik: yopiq rejimda nimalar himoya qiladi
 
-Yopiq demo **kirish kodi**, **server kaliti** va **kodni ishga tushirish**ni birlashtiradi. Agar kimdir kirish kodini
+Yopiq rejim **kirish kodi**, **server kaliti** va **kodni ishga tushirish**ni birlashtiradi. Agar kimdir kirish kodini
 topsa, u bularning hammasiga qo'l uzatadi. Shuning uchun qatlamlar:
 
 | Xavf | Himoya |
@@ -100,6 +100,7 @@ O'zgartirgandan keyin Render servisni qayta ishga tushiradi (yoki **Manual Deplo
 
 | Belgi | Sabab va yechim |
 |---|---|
+| Sayt kod so'ramaydi, «Sayt hali yopilmagan: kirish kodi qo'yilmagan» chiqadi (503) | `ANTHROPIC_API_KEY` bor, lekin `DEOBF_ACCESS_CODE` yo'q. Kodsiz sayt hammaga ochiq bo'lardi, shuning uchun u to'xtatiladi va kalit ishlatilmaydi. Render → Environment → `DEOBF_ACCESS_CODE` = o'zingiz tanlagan kod → Save. |
 | Kirgandan keyin qizil blok «Serverda Claude kaliti ulanmagan» va «Sizning kalitingiz» maydoni chiqadi | Render → Environment da `ANTHROPIC_API_KEY` yo'q, bo'sh yoki nomi boshqacha yozilgan (sahifa o'xshash nomlarni o'zi ko'rsatadi). To'g'ri nom: `ANTHROPIC_API_KEY`. Saqlagach Render servisni o'zi qayta ishga tushiradi. |
 | Kalit maydoni yo'q, lekin pastda qizil «Kalit noto'g'ri yoki bekor qilingan» | Kalit Render'ga ulangan, lekin Anthropic uni qabul qilmayapti: console.anthropic.com da kalit o'chirilgan/bekor qilingan yoki to'liq nusxalanmagan. Yangi kalit yarating va `ANTHROPIC_API_KEY` qiymatini almashtiring. |
 | «Server kodni ishga tushirmaydi… Tekshirilmadi» | Render konteynerda kodni alohida foydalanuvchi nomidan ishga tushirishga ruxsat bermadi (log'da «OGOHLANTIRISH» bor). Claude va Offline ishlayveradi, faqat gcc + test o'chadi. |
@@ -116,7 +117,7 @@ O'zgartirgandan keyin Render servisni qayta ishga tushiradi (yoki **Manual Deplo
 
 ---
 
-## 4. Ochiq demo (kodsiz, hamma uchun)
+## 4. Ochiq rejim (kodsiz, hamma uchun)
 
 Agar havolani kodsiz tarqatmoqchi bo'lsangiz: `DEOBF_ACCESS_CODE`, `DEOBF_USE_SERVER_KEY`, `DEOBF_NATIVE` ni **qo'ymang**. Shunda:
 server kalit saqlamaydi (foydalanuvchi o'zinikini kiritadi), kod ishga tushirilmaydi («Tekshirilmadi»), cheklovlar qattiq
@@ -126,9 +127,9 @@ server kalit saqlamaydi (foydalanuvchi o'zinikini kiritadi), kod ishga tushirilm
 
 ## 5. O'zingiz sinab ko'rish
 
-Kompyuteringizda ochiq demo ko'rinishini: `deobf web --public`.
+Kompyuteringizda ochiq rejim ko'rinishini: `deobf web --public`.
 
-Yopiq demoni kompyuteringizda sinash (Linux/macOS, root bo'lsangiz ajratish ham ishlaydi):
+Yopiq rejimni kompyuteringizda sinash (Linux/macOS, root bo'lsangiz ajratish ham ishlaydi):
 
 ```bash
 DEOBF_PUBLIC=1 DEOBF_ACCESS_CODE=1234 DEOBF_NATIVE=1 DEOBF_USE_SERVER_KEY=1 \
@@ -143,7 +144,7 @@ Docker bilan: `docker build -t deobf-agent .` va `docker run -p 8000:8000 -e DEO
 
 ## 6. Boshqa xostinglar
 
-`Dockerfile` oddiy, shuning uchun Docker qabul qiladigan har qanday xostingda ishlaydi. Yopiq demo uchun xosting
+`Dockerfile` oddiy, shuning uchun Docker qabul qiladigan har qanday xostingda ishlaydi. Yopiq rejim uchun xosting
 konteynerni **root** sifatida ishga tushirishga ruxsat berishi kerak (foydalanuvchi ajratish uchun); bo'lmasa kod ishga
 tushirilmaydi va natija «Tekshirilmadi» bo'ladi.
 

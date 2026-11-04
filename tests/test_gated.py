@@ -42,7 +42,7 @@ def test_wrong_code_rejected_and_right_code_opens_the_site(gated):
     assert c.get("/").status_code == 302                          # hali kirmagan
     assert login(c).status_code == 303
     page = c.get("/")
-    assert page.status_code == 200 and "Yopiq demo" in page.get_data(as_text=True)
+    assert page.status_code == 200 and "Tahlil qilish" in page.get_data(as_text=True) and "demo" not in page.get_data(as_text=True).lower()
     assert "no-store" in page.headers["Cache-Control"]
     c.post("/logout")
     assert c.get("/").status_code == 302                          # chiqqach yana kod kerak
@@ -191,7 +191,7 @@ def test_with_server_key_the_page_has_no_key_field_and_says_claude_is_connected(
     login(c)
     html = c.get("/").get_data(as_text=True)
     assert 'id="api_key"' not in html and "Sizning kalitingiz" not in html          # foydalanuvchidan kalit so'ralmaydi
-    assert "Claude serverga ulangan kalit bilan ishlaydi" in html and "Server kaliti ulangan" in html
+    assert "Server kaliti ulangan" in html and "demo" not in html.lower()
 
 
 def test_without_server_key_the_page_names_the_cause_and_misspelled_variables(gated, monkeypatch):
@@ -230,3 +230,17 @@ def test_key_copied_into_render_with_quotes_or_newline_still_works(monkeypatch):
     from deobf_agent import llm
     monkeypatch.setenv("ANTHROPIC_API_KEY", ' "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUV"\n')
     assert llm.server_api_key() == "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUV"
+
+
+def test_key_without_access_code_stops_the_site_and_explains_how_to_close_it(monkeypatch):
+    monkeypatch.setattr(sandbox, "PUBLIC", True)
+    monkeypatch.setattr(sandbox, "NATIVE", False)
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-SERVERKEYSERVERKEY1234567890")
+    c = create_app({"ACCESS_CODE": ""}).test_client()
+    for r in (c.get("/"), c.post("/analyze", data={"code": S1, "engine": "offline"}), c.post("/api/check-key", data={"model": "sonnet"})):
+        assert r.status_code == 503 and "DEOBF_ACCESS_CODE" in r.get_data(as_text=True)
+        assert "SERVERKEY" not in r.get_data(as_text=True)                            # kalit sahifaga chiqmaydi
+    assert c.get("/healthz").get_data(as_text=True) == "ok"                           # Render sog'liq tekshiruvi buzilmaydi
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    assert create_app({"ACCESS_CODE": ""}).test_client().get("/").status_code == 200   # kalitsiz ochiq sayt oldingidek ishlaydi
