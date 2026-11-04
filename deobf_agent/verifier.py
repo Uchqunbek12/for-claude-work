@@ -16,7 +16,7 @@ Holatlar (status):
 
 from __future__ import annotations
 
-import tempfile
+import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -96,7 +96,7 @@ def _type_problem(orig: str, cand: str, what: str) -> str:
 def verify(parsed: ParsedInput, func: FunctionInfo, c_code: str, n_tests: int = 2000) -> VerifyReport:
     try:
         return _verify(parsed, func, c_code, n_tests)
-    except (OSError, UnicodeError) as exc:        # kompilyator topilmadi/fayl yozib bo'lmadi/yaroqsiz belgi — butun ish to'xtamasin
+    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:        # kompilyator topilmadi/fayl yozib bo'lmadi/yaroqsiz belgi — butun ish to'xtamasin
         return VerifyReport("compile_error", details=f"Tekshiruvni bajarib bo'lmadi: {type(exc).__name__}: {exc}",
                             problems=f"The verifier could not process the code ({type(exc).__name__}). "
                                      "Make sure c_code contains only valid ASCII/UTF-8 C source.")
@@ -112,7 +112,7 @@ def _verify(parsed: ParsedInput, func: FunctionInfo, c_code: str, n_tests: int) 
     # IDA/Ghidra global nomlari (dword_404010, DAT_...) e'lon qilinmagan bo'lsa, ularni avtomatik e'lon qilamiz —
     # differensial testda ham aynan shunday qilinadi.
     declared = harness.declare_globals(c_code, harness.find_globals(c_code, set(parsed.data_blobs)))
-    with tempfile.TemporaryDirectory(prefix="deobf_verify_") as tmp:
+    with sandbox.workdir("deobf_verify_") as tmp:
         syn = compiler.syntax_check(declared, Path(tmp))
     if not syn.ok:
         return VerifyReport("compile_error", details=syn.errors,

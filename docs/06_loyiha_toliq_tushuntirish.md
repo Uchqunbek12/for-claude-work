@@ -62,7 +62,8 @@ ba'zan kunlar oladi.
 (61 ta funksiya) noto'g'ri natija (mismatch) 0 ta.
 
 **Qanday ishlaydi.** Web sahifa (brauzerda) va buyruq qatori (terminalda) ikkalasi bor. Internetga chiqarish uchun
-tayyorlangan, lekin **hali joylanmagan** (12-bo'limga qarang).
+tayyorlangan: **yopiq demo** (kirish kodi bilan, Claude sizning kalitingiz bilan, to'liq tekshiruv) — lekin Render'da
+**hali joylanmagan**, buni faqat siz qila olasiz (12-bo'limga qarang).
 
 **Eng muhim halol gap.** Loyihaning oxirgi bosqichida 5 ta mustaqil "tekshiruvchi" kodni sinab chiqdi va bizning
 "tasdiqlandi" degan natijamiz **ba'zi hollarda yolg'on ishonch bergani**ni topdi. Biz buni tuzatdik (9-bo'lim). Bu
@@ -144,6 +145,11 @@ Yettinchi detektor — **mashhur konstantalar** (FNV, CRC-32 kabi). Bu chalkasht
 | **Rate limit** | Bir odam qisqa vaqtda ko'p so'rov yubora olmasligi. | Public demoda 10 daqiqada 15 tahlil. |
 | **Sandbox** | Dasturni "qum qutisida" — cheklangan muhitda ishga tushirish. | `sandbox.py`. Pastda: nega yetarli emas (11-bo'lim). |
 | **Nonce** | Faqat bir marta ishlatiladigan tasodifiy so'z. | Test dasturi natija satrlariga qo'shadi: tekshirilayotgan kod soxta natija yoza olmasligi uchun. |
+| **Sessiya va cookie** | Saytga kirganingizni brauzer "eslab qolishi": kirgandan keyin server sizga imzolangan kichik belgi (cookie) beradi. | Kirish kodini har bosishda so'ramaslik uchun. `HttpOnly` — skript uni o'qiy olmaydi; `Secure` — faqat HTTPS orqali yuboriladi. |
+| **Brute force** (qo'pol kuch) | Parolni hamma variantni birma-bir sinab topish. 4 xonali kodda 10 000 variant bor. | Urinishlar cheklangan (bitta IP'dan 15 daqiqada 5 ta; jami soatiga 40 ta). |
+| **Foydalanuvchi ajratish (uid)** | Operatsion tizimda har bir dastur ma'lum foydalanuvchi huquqi bilan ishlaydi. Huquqsiz foydalanuvchi boshqa foydalanuvchining jarayoni va maxfiy qiymatlarini o'qiy olmaydi. | Tekshirilayotgan kod serverning API kalitini o'qiy olmasligi uchun (`DEOBF_SANDBOX_UID`). |
+| **`sync: false`** (render.yaml) | "Bu qiymatni faylda saqlama, Render'da men kiritaman." | Parol va kalit GitHub'ga tushmasligi uchun. |
+| **Kunlik byudjet** | Bir kunda Claude uchun sarflanadigan eng ko'p pul. | Kod qo'lga tushsa ham pul cheksiz ketmasligi uchun. |
 
 ### 2.6. Joylash (deploy)
 
@@ -496,7 +502,8 @@ Har bir bosqich alohida **commit** (saqlash nuqtasi) sifatida GitHub'da. Batafsi
 | **8. Windows tuzatishlari** | `.env` har qanday kodlashda o'qiladi; `deobf check`; `.bat` fayllar; kalitni tekshirish tugmasi. | Siz ishlatganda dastur ishga tushmadi: PowerShell `.env` ni UTF-16 da yozgan edi. **Haqiqiy foydalanuvchi muhitida sinash zarurligi** saboq bo'ldi. | Python |
 | **9. Mukammallashtirish** | Bufer/ko'p funksiya/tashqi chaqiruv bilan ishlash; 3 yangi namuna; UI qayta dizayn; "dehqoncha"; public rejim; Dockerfile. | Siz so'ragan: murakkabroq kod, sodda UI, hamma tushunsin, internetga chiqarish. | Chromium, Docker |
 | **10. Mustaqil audit va tuzatishlar** | 5 mustaqil agent kodni sindi; topilgan xatolar tuzatildi; Sonnet 5.5; aniq jumlali bloklar; brauzer sinovi; hujjatlar. | "Xato ketgan joying bormi?" degan savolingiz. Natija — 9-bo'lim. | agentlar, Playwright |
-| **11. Joylash** (bu hujjat) | Joylashga tayyorlik tekshirildi, to'liq tushuntirish yozildi. | Ustozga ko'rsatish. | — |
+| **11. Joylashga tayyorlik** | Joylash qadamlari qayta ishlab tekshirildi, to'liq tushuntirish (shu hujjat) yozildi. | Ustozga ko'rsatish. | — |
+| **12. Yopiq demo** | Siz so'radingiz: "loyiha ishlashi kerak, saytga parol bilan kiradigan qil, API'imni serverga qo'y". Kirish kodi, server kaliti (kunlik byudjet bilan), to'liq tekshiruv alohida huquqsiz foydalanuvchi nomidan, urinishlar cheklovi, 10 ta yangi test. | Ochiq demo "Tekshirilmadi" bo'lib, demo uchun yaroqsiz edi; kirish kodi xavf modelini o'zgartiradi, shuning uchun to'liq ishlashni xavfsiz yoqish mumkin. | Flask sessiya, Docker, Playwright |
 
 ---
 
@@ -634,69 +641,93 @@ emasligini** ko'rsatdi: cheklovlar *resursni* chegaralaydi, lekin dasturni boshq
 
 ---
 
+### 11.4. Yopiq demo: nega endi kod ishga tushadi va loyiha to'liq ishlaydi
+
+**Savol, ko'pchilik so'raydi:** "11.2 da kod ishga tushmaydi, natija «Tekshirilmadi» dedingiz. Loyiha ishlamasa, u nima
+uchun kerak?"
+
+**Javob — vaziyatga bog'liq:**
+
+* Havolani **hamma** ochishi mumkin bo'lsa (ochiq demo), begona odam zararli kod yuborishi mumkin. Shuning uchun u yerda
+  tekshiruv o'chirilgan: bu *xavfsizlik uchun to'langan narx*.
+* Havolani faqat **siz va ustoz** ishlatsangiz, vaziyat boshqa: kodni faqat **kirish kodini bilganlar** yuboradi. Shuning
+  uchun **yopiq demo** yaratdik: kirish kodi bilan kirgach, hamma narsa **to'liq** ishlaydi — Claude (sizning kalitingiz bilan),
+  gcc kompilyatsiyasi va differensial test, «Tasdiqlandi» natijasi.
+
+**Yopiq demo qanday himoyalanadi** (har bir qatlam va uning sababi):
+
+| Qatlam | Nima | Nega |
+|---|---|---|
+| **Kirish kodi** (`DEOBF_ACCESS_CODE`) | Saytning hamma sahifasi (hatto natijalarni yuklab olish ham) kodsiz yopiq. | Begonalar kod yubora olmasin va kalitingizdan foydalana olmasin. |
+| **Urinishlar cheklovi** | Noto'g'ri kod: bitta IP'dan 15 daqiqada 5 ta, jami 1 soatda 40 ta; undan keyin bloklanadi. | 4 xonali kod — 10 000 variant. Cheklovsiz uni bir necha daqiqada terib topish mumkin edi. |
+| **Kunlik byudjet** (`DEOBF_DAILY_BUDGET_USD`) | Kuniga Claude uchun ko'pi bilan shuncha dollar; keyin Claude to'xtaydi, offline ishlayveradi. | Kod qo'lga tushsa ham, pulingiz cheksiz ketmaydi. |
+| **Alohida foydalanuvchi** (`DEOBF_SANDBOX_UID`) | Server `root`, tekshirilayotgan kod esa huquqsiz `sandbox` foydalanuvchisi nomidan ishlaydi. | Kod serverning muhit o'zgaruvchilarini o'qiy olmaydi, ya'ni **API kalit o'g'irlanmaydi**. Bu tekshirilgan: `Permission denied`. |
+| **O'z-o'zini sinash** | Server ishga tushganda ajratish ishlashi sinab ko'riladi; ishlamasa, kod ishga tushirilmaydi. | Himoya jimgina buzilib qolmasligi uchun. |
+| **Xavfsiz sozlama majburiyati** | `DEOBF_USE_SERVER_KEY` kirish kodisiz yoqilsa, server ishga tushmaydi. | Adashib kalitni hammaga ochib qo'ymaslik uchun. |
+| **Maxfiy qiymatlar repoda yo'q** | Kod va kalit faqat Render sozlamalarida. | GitHub'ni boshqalar ko'rishi mumkin. |
+
+**Qoldiq xavf (halol):** 4 xonali kod — kuchsiz parol. Cheklovlar uni topishni sekinlashtiradi, lekin imkonsiz qilmaydi.
+Kodni topgan odam sizning kalitingiz bilan (byudjet chegarasida) Claude'dan foydalanishi va kodini serverda
+(huquqsiz foydalanuvchi nomidan) ishga tushirishi mumkin. Shuning uchun: (1) Anthropic konsolida **oylik limit** qo'ying;
+(2) ustozga ko'rsatgach, kodni o'zgartiring yoki xizmatni to'xtating.
+
+---
+
 ## 12. Internetga chiqarish
 
 ### 12.1. Hozirgi holat — halol
 
-* **Tayyor:** `Dockerfile`, `render.yaml`, `wsgi.py` va yo'riqnoma (`docs/04_internetga_chiqarish.md`).
-* **Tekshirilgan:** Dockerfile'dagi qadamlar (toza muhitga o'rnatish → `gunicorn wsgi:app`) Docker'siz **qayta ishlab**
-  ko'rildi: sayt 200 beradi, statik fayllar yuklanadi, xavfsizlik sarlavhalari bor, public rejimda kod ishga tushmaydi,
-  kalitsiz Claude rad etiladi, boshqa sayt formasi `403` oladi.
-* **Joylanmagan:** Render'da hisob ochish va "Deploy" tugmasini bosish **faqat siz** qila oladigan ish (hisobingizga kirish
-  kerak). Bu muhitda hech qanday bulut hisobi (Render, Google Cloud) ulanmagan.
-* **Docker'da haqiqiy `docker build` bu yerda ishga tushirilmagan** (Docker o'rnatilmagan).
+* **Tayyor:** `Dockerfile`, `render.yaml`, `wsgi.py`, yo'riqnoma (`docs/04_internetga_chiqarish.md`).
+* **Qanday sinalgan:** haqiqiy Chromium'da xuddi Render'dagi sozlamalar bilan: kodsiz kirsa `/login` ga o'tadi; noto'g'ri
+  kod rad etiladi; to'g'ri kod bilan kiriladi; offline tahlil **«Tasdiqlandi. 2000 ta tasodifiy test»** (kod alohida
+  foydalanuvchi nomidan ishga tushirilgan); Claude so'rovi (soxta kalit bilan) Anthropic serveriga yetib borib, tushunarli
+  «Kalit noto'g'ri» xabari qaytardi. Ajratishning o'zi ham sinalgan: bola jarayon `uid=10002`, serverning muhitini
+  o'qimoqchi bo'lganda `Permission denied`.
+* **Joylanmagan:** Render'da hisob ochib «Create» bosish **faqat siz** qila oladigan ish: bu muhitda hech qanday bulut
+  hisobi ulanmagan. Haqiqiy `docker build` ham bu yerda ishga tushirilmagan (Docker yo'q).
 
 ### 12.2. Qadamlar (Render, bepul)
 
-GitHub repozitoriyangizda **asosiy (default) branch aynan `claude/vibrant-heisenberg-teie45`** — shuning uchun Render uni
-to'g'ridan-to'g'ri ko'radi (alohida `main` branch yo'q).
-
-1. [render.com](https://render.com) ga kiring, **GitHub bilan** ro'yxatdan o'ting.
-2. **New → Blueprint** → repozitoriya `Uchqunbek12/for-claude-work` ni tanlang (Render GitHub'ga kirishga ruxsat so'raydi).
-   *(Render interfeysidagi tugma nomlari vaqt o'tishi bilan o'zgarishi mumkin: maqsad — repozitoriyani ulab, `render.yaml` dan servis yaratish.)*
-3. Render `render.yaml` ni o'qiydi (`DEOBF_PUBLIC=1`, `DEOBF_TRUSTED_PROXIES=1`) — **Apply/Create** bosing.
-4. 2–4 daqiqa kuting. Render `https://deobf-agent-xxxx.onrender.com` kabi havola beradi — shuni ustozga yuboring.
-5. Bepul reja 15 daqiqa foydalanilmasa "uxlab qoladi": birinchi ochilish 30–60 soniya sekinroq bo'ladi. Namoyishdan **oldin
-   sahifani bir marta oching**.
+1. Anthropic konsolida kalit yarating va **oylik xarajat limiti** qo'ying (docs/04, 3.1).
+2. [render.com](https://render.com) ga GitHub bilan kiring → **New → Blueprint** → `Uchqunbek12/for-claude-work`.
+   GitHub'dagi asosiy branch aynan bizning branchimiz, shuning uchun Render uni o'zi oladi.
+3. Render **ikkita qiymat** so'raydi: `DEOBF_ACCESS_CODE` (kirish kodi) va `ANTHROPIC_API_KEY` (Claude kaliti). Ularni
+   **faqat shu yerga** kiriting (chatga yoki GitHub'ga emas).
+4. **Apply** bosing, 3–6 daqiqa kuting. Render `https://deobf-agent-xxxx.onrender.com` havolasini beradi.
+5. Havolani ochsangiz, **kirish kodi** so'raladi. Kod bilan kirgach, hammasi ishlaydi.
+6. Bepul reja 15 daqiqa ishlatilmasa uxlab qoladi (birinchi ochilish 30–60 s sekinroq): namoyishdan oldin bir marta oching.
 
 ### 12.3. Nega aynan shu tanlovlar
 
 | Tanlov | Sabab |
 |---|---|
-| Docker | Qayerda ochilsa ham bir xil ishlaydi; gcc kerak emas (public rejimda kod ishga tushmaydi), shuning uchun kichik va tez. |
-| `--workers 1 --threads 8` | Hisobotlar va cheklovlar jarayon xotirasida saqlanadi; ko'p jarayonda yuklab olish havolasi tasodifiy "topilmadi" bergan bo'lardi. |
-| `exec gunicorn` | Server o'chirilganda signal to'g'ri yetib borishi uchun. |
-| `DEOBF_TRUSTED_PROXIES=1` | Render proksi orqasida; shunda cheklov har bir **haqiqiy** foydalanuvchi uchun alohida. To'g'ridan-to'g'ri internetga ochilsa, bu o'zgaruvchi o'rnatilmaydi (soxta `X-Forwarded-For` bilan aylanib o'tilmasligi uchun). |
+| Docker | Qayerda ochilsa ham bir xil ishlaydi; gcc ichida bor. |
+| `--workers 1 --threads 8` | Hisobotlar va cheklovlar jarayon xotirasida; ko'p jarayonda yuklab olish havolasi tasodifiy «topilmadi» bo'lardi. |
+| `exec gunicorn` | O'chirishda signal to'g'ri yetib borishi uchun. |
+| `/healthz` | Render sog'liq tekshiruvi kirish kodisiz ishlashi uchun. |
+| `DEOBF_TRUSTED_PROXIES=1` | Render proksi orqasida: urinish cheklovi har bir **haqiqiy** mijoz uchun alohida bo'lishi uchun. |
+| `sync: false` | Maxfiy qiymatni Render sizdan so'raydi va GitHub'ga yozilmaydi. |
 
 ---
 
 ## 13. API ishlayaptimi? Kalit haqida
 
-**Qisqa javob: yo'q, kalit qo'yilmagan va men uni sinab ko'rmaganman.**
+**Hozirgi holat:** bu muhitda (men ishlayotgan joyda) haqiqiy kalit **yo'q**, shuning uchun Claude'ning *haqiqiy javobini*
+ko'rmaganman. Lekin API yo'li ochiq ekani tasdiqlandi: soxta kalit bilan so'rov Anthropic serveriga yetib bordi va server
+«kalit noto'g'ri» deb javob berdi, vosita buni tushunarli xabarga aylantirdi.
 
 | Savol | Javob |
 |---|---|
-| Bu muhitda API kalit bormi? | **Yo'q.** `ANTHROPIC_API_KEY` bo'sh, `.env` fayli ham yo'q. |
-| Claude rejimi haqiqiy API bilan sinalganmi? | **Yo'q.** Faqat soxta mijoz bilan (testlarda). Matn sifati va narx ($0.03–0.07) — taxminiy. |
-| API serveriga tarmoq yo'li bormi? | **Ha.** Kalitsiz so'rovga server `401` javob berdi — yo'l ochiq, faqat kalit yo'q. |
-| Nega kalitni o'zim qo'ymadim? | Kalit — **parol**: u orqali pul sarflanadi. Uni chatga yozish yoki internetdagi serverga qo'yish xavfli. Public rejimda server kalit saqlamaydi (BYOK) — bu **ataylab qilingan himoya**. |
-| Offline rejim kalit kerakmi? | **Yo'q.** Bepul va kalitsiz ishlaydi. |
+| Kalit qo'yilganmi? | **Yo'q** — kalit faqat sizda. Uni Render'ga **siz** kiritasiz (12.2, 3-qadam). Men uni ko'ra ham, yozib ham olmayman, GitHub'ga ham tushmaydi. |
+| Nega kalitni menga yubormang? | Kalit — parol: u orqali sizning pulingiz sarflanadi. Chat yozuvlari saqlanadi. Maxfiy qiymat faqat Render'ning maxfiy sozlamasida turishi kerak. |
+| Claude rejimi sinalganmi? | Kalitsiz zanjir (so'rov → javobni o'qish → tekshiruv → hisobot) soxta mijoz bilan sinalgan; haqiqiy javob sifati va narx ($0.03–0.07/funksiya) — **taxminiy**. |
+| Offline rejim kalit kerakmi? | Yo'q. Bepul va kalitsiz ishlaydi. |
 
-### Kalitni qanday qo'yasiz va tekshirasiz
+### Kalitni tekshirish
 
-**O'z kompyuteringizda** (Windows):
-1. [console.anthropic.com](https://console.anthropic.com) da kalit yarating va balansni to'ldiring (kichik summa yetadi).
-2. `2_kalit_kiritish.bat` ni ikki marta bosing — u kalitni so'rab `.env` fayliga to'g'ri yozadi va **darhol tekshiradi**.
-3. Tekshirish: `4_tekshirish.bat` yoki `deobf check`; Web UI'da **"Kalitni tekshirish"** tugmasi. Tekshiruv `models.retrieve`
-   ni chaqiradi — u matn yaratmaydi, shuning uchun **bepul**.
-
-**Public saytda:** tashrif buyuruvchi (yoki ustoz) o'z kalitini "Sizning kalitingiz" maydoniga kiritadi. Kalit faqat shu
-so'rov uchun ishlatiladi va saqlanmaydi. Kalit kiritilmasa, **Offline** rejim ishlaydi.
-
-> **Eslatma.** Agar ustozga Claude natijasini ko'rsatmoqchi bo'lsangiz, eng xavfsiz yo'l — **o'z kompyuteringizda**
-> (`.env` da kalit bilan) ko'rsatish. Public saytda sizning kalitingizni hech kim ishlata olmaydi (bu ataylab).
-
----
+* Saytda **«Kalitni tekshirish»** tugmasi: `models.retrieve` ni chaqiradi — u matn yaratmaydi, shuning uchun **bepul**.
+* O'z kompyuteringizda: `2_kalit_kiritish.bat` (kalitni to'g'ri yozadi va darhol tekshiradi), keyin `4_tekshirish.bat` yoki `deobf check`.
+* Render'da kalit noto'g'ri bo'lsa, tahlil natijasida «Kalit noto'g'ri yoki bekor qilingan» xabari chiqadi va offline natija ko'rsatiladi.
 
 ## 14. Cheklovlar: nima ishlamaydi
 
@@ -712,14 +743,20 @@ Quyidagilar **hujjatlarda ochiq aytilgan** va ustoz so'rasa, yashirmasdan javob 
 | Virtualizatsiya (VMProtect) | Loyiha doirasidan tashqarida. |
 | **Claude rejimi sinalmagan** | Faqat soxta mijoz bilan. Haqiqiy sifat va narx noma'lum. |
 | **`docker build` ishga tushirilmagan** | Qadamlar qayta ishlab ko'rilgan, haqiqiy build emas. |
-| Public demo kodni ishga tushirmaydi | Xavfsizlik uchun; to'liq tekshiruv faqat lokal. |
+| Ochiq demo (kodsiz) kodni ishga tushirmaydi | Xavfsizlik uchun «Tekshirilmadi». To'liq tekshiruv — yopiq demoda (kirish kodi bilan) yoki lokal. |
+| 4 xonali kirish kodi kuchsiz | Cheklovlar va byudjet bilan himoyalangan, lekin imkonsiz emas: uzunroq kod qo'yish va Anthropic'da oylik limit belgilash tavsiya etiladi. |
+| Yopiq demoda kod serverda ishga tushadi | Huquqsiz foydalanuvchi nomidan, lekin tarmoq va umumiy yadro izolyatsiyasi (gVisor/VM kabi) yo'q: faqat ishonchli kishilarga kod bering. |
 | Dekompilyator xatolari | angr ba'zan o'zi xato qiladi (2/8 namuna); vosita psevdokodni etalon deb oladi. |
 
 ---
 
 ## 15. Ustozga namoyish rejasi (5–7 daqiqa)
 
-Namoyishdan oldin: terminalda `.venv` faol bo'lsin (yoki `3_web_ishga_tushirish.bat`).
+Namoyishdan oldin ikki yo'ldan birini tanlang:
+
+* **Internetdagi sayt (Render):** havolani **oldindan bir marta oching** (bepul reja uxlab qoladi, birinchi ochilish
+  30–60 s), kirish kodini kiriting. Ustozga havolani va kodni alohida xabarda yuboring.
+* **Kompyuteringizda:** terminalda `.venv` faol bo'lsin (yoki `3_web_ishga_tushirish.bat`), `deobf web`.
 
 1. **Muammoni ko'rsating (1 daqiqa).** `samples/decompiled/s5_combined.angr.c` ni oching: 49 qator, `while(1){switch}`,
    ma'nosiz nomlar. "Mana shuni tushunish qiyin."
@@ -734,7 +771,8 @@ Namoyishdan oldin: terminalda `.venv` faol bo'lsin (yoki `3_web_ishga_tushirish.
 5. **Testlar (30 s).** `python -m pytest -q` → **102 passed**.
 6. **Halollik (1 daqiqa).** "Biz kodni mustaqil tekshiruvchilar bilan sindirdik: 18 ta jiddiy xato topildi (ba'zilari bizning 'tasdiqlandi'mizni
    noto'g'ri qilib qo'yardi) va hammasi tuzatildi, har biri uchun test yozildi (9-bo'lim)." — bu ustozga eng yaxshi taassurot qoldiradi.
-7. **Claude (agar kalit bo'lsa).** Model: Sonnet → bir funksiya → "mazmunli nom va izoh qanday chiqdi".
+7. **Claude (kalit ulangan bo'lsa).** Yopiq saytda server kaliti bilan, kompyuteringizda `.env` dagi kalit bilan. Model: Sonnet → bir
+   funksiya → "mazmunli nom va izoh qanday chiqdi". Kalit bo'lmasa yoki xato bo'lsa, sayt tushunarli xabar beradi va offline natijani ko'rsatadi.
 
 ---
 
@@ -754,8 +792,9 @@ Matematik isbotlay olmaymiz. Differensial test minglab tasodifiy va chegaraviy k
 kuchli *dalil*, lekin isbot emas (14-bo'lim). Shuning uchun hisobotda "Tasdiqlandi" deymiz, "isbotlandi" demaymiz.
 
 **4. Nega ba'zi natijalar "Tekshirilmadi"?**
-Chunki public saytda begona kodni serverda ishga tushirish xavfli. Bu **ataylab** qilingan xavfsizlik qarori. Lokalda to'liq
-tekshiruv ishlaydi.
+Faqat **ochiq** demoda (parolsiz, hamma kira oladigan): u yerda begona kodni serverda ishga tushirish xavfli, shuning uchun
+tekshiruv o'chirilgan. **Yopiq** demoda (kirish kodi bilan) va kompyuteringizda to'liq tekshiruv ishlaydi — «Tasdiqlandi»
+chiqadi. Ya'ni loyiha to'liq ishlaydi; xavfsizlik darajasini kimga ochilganiga qarab tanlaymiz (11.4).
 
 **5. Nega standart model Sonnet, Haiku emas?**
 Sifat va narx o'rtasidagi muvozanat: Sonnet kuchliroq, Haiku ~20 baravar arzon. Ikkalasi bir tugma bilan almashtiriladi.

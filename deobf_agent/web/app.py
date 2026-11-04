@@ -2,27 +2,34 @@
 
 Ishga tushirish:  deobf web        ->  http://127.0.0.1:5000 manzilini brauzerda oching.
 
-Ikki rejim:
+Uch rejim:
   * shaxsiy (standart) — faqat shu kompyuterdan (127.0.0.1) ochiladi, sizning .env dagi kalitingiz bilan ishlaydi.
     Brauzerdagi boshqa saytlar (CSRF / DNS rebinding) uni chaqira olmasligi uchun Host va Origin tekshiriladi.
   * public (DEOBF_PUBLIC=1) — internetga chiqariladigan demo uchun. Server kalit saqlamaydi: Claude kerak bo'lsa,
     tashrif buyuruvchi O'Z kalitini kiritadi va u hech qayerda saqlanmaydi. Standart dvigatel — offline (bepul).
     Tashrif buyuruvchining kodi serverda kompilyatsiya qilinmaydi va ishga tushirilmaydi (sandbox.native_allowed).
     Kirish hajmi, funksiyalar soni, vaqt va so'rovlar tezligi cheklanadi, disk kesh o'chiriladi.
+  * yopiq demo (public + DEOBF_ACCESS_CODE) — saytga faqat kirish kodi bilan kiriladi (urinishlar cheklangan). Kirgan
+    foydalanuvchi uchun server kalitidan (ANTHROPIC_API_KEY, kunlik byudjet bilan) foydalanish va kodni to'liq tekshirish
+    (gcc + differensial test, alohida foydalanuvchi nomidan) yoqilishi mumkin. Maxfiy qiymatlar faqat muhit
+    o'zgaruvchilarida — kodda va repozitoriyda emas.
     Batafsil: docs/04_internetga_chiqarish.md.
 """
 
 from __future__ import annotations
 
+import hmac
 import os
+import secrets
 import threading
 import time
 import uuid
 from collections import OrderedDict
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Flask, Response, abort, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, session, url_for
 
 from .. import llm, report, sandbox
 from ..agent import AgentConfig, deobfuscate_text
@@ -78,6 +85,35 @@ class RateLimiter:
             return ok
 
 
+    def count(self, key: str, now: float) -> int:
+        with self.lock:
+            return len([t for t in self.hits.get(key, []) if now - t < self.window])
+
+
+class Budget:
+    """Kunlik xarajat chegarasi (AQSh dollari). Kirish kodi kimdadir qo'liga tushsa ham, kalitingiz haddan ortiq sarflanmasin."""
+
+    def __init__(self, limit_usd: float | None):
+        self.limit = limit_usd
+        self.day, self.spent = "", 0.0
+        self.lock = threading.Lock()
+
+    def _roll(self) -> None:
+        today = time.strftime("%Y-%m-%d", time.gmtime())
+        if today != self.day:
+            self.day, self.spent = today, 0.0
+
+    def allow(self) -> bool:
+        with self.lock:
+            self._roll()
+            return self.limit is None or self.spent < self.limit
+
+    def add(self, usd: float) -> None:
+        with self.lock:
+            self._roll()
+            self.spent += usd
+
+
 def _has_include(code: str) -> bool:
     """`#include` (va `# include`, `%:include`) qatorlari bormi? Public demoda taqiqlanadi."""
     import re
@@ -87,14 +123,30 @@ def _has_include(code: str) -> bool:
 
 def create_app(test_config: dict | None = None) -> Flask:
     public = sandbox.PUBLIC
-    limits = LIMITS[public]
+    limits = dict(LIMITS[public])
     app = Flask(__name__)
     app.config.update(MAX_CONTENT_LENGTH=limits["max_body"], PUBLIC=public, LOCAL_ONLY=True,
-                      CACHE_DIR=None if public else ".deobf_cache", CLIENT=None)
+                      CACHE_DIR=None if public else ".deobf_cache", CLIENT=None,
+                      ACCESS_CODE=os.environ.get("DEOBF_ACCESS_CODE", "").strip(),
+                      DAILY_BUDGET_USD=float(os.environ.get("DEOBF_DAILY_BUDGET_USD", "2") or 2))
     if test_config:
         app.config.update(test_config)
+    access_code = app.config["ACCESS_CODE"]
+    gated = bool(access_code)                              # saytga faqat kod bilan kiriladi
+    if sandbox.USE_SERVER_KEY and not gated:               # server kaliti hech qachon ochiq saytda ishlamasin
+        raise RuntimeError("DEOBF_USE_SERVER_KEY faqat DEOBF_ACCESS_CODE bilan birga ishlaydi: kirish kodisiz sayt "
+                           "kalitingizdan har kim foydalanishiga yo'l qo'yardi.")
+    if public:
+        sandbox.configure(gated, log=app.logger.warning)   # kod ishga tushirish: faqat kod + (kalit bo'lsa) ajratish sinovi
+        if sandbox.native_allowed():
+            limits["n_tests"] = 2000                       # to'liq tekshiruv yoqilgan: shaxsiy rejimdagidek
+    server_key = bool(os.environ.get("ANTHROPIC_API_KEY")) and (not public or sandbox.USE_SERVER_KEY)
+    budget = Budget(app.config["DAILY_BUDGET_USD"] if sandbox.USE_SERVER_KEY else None)
+    app.secret_key = os.environ.get("DEOBF_SESSION_SECRET") or secrets.token_hex(32)
     # Render kabi proksi orqasida haqiqiy mijoz IP'si kerak: ishonchli proksilar soni DEOBF_TRUSTED_PROXIES (standart 0)
     proxies = int(os.environ.get("DEOBF_TRUSTED_PROXIES", "0") or 0)
+    app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=proxies > 0,
+                      PERMANENT_SESSION_LIFETIME=timedelta(hours=12))
     if proxies > 0:
         from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -106,6 +158,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     analyze_limiter = RateLimiter(*limits["analyze_rate"]) if limits["analyze_rate"] else None
     key_limiter = RateLimiter(*limits["key_rate"]) if limits["key_rate"] else None
     slots = threading.BoundedSemaphore(limits["slots"])  # bir vaqtda ishlaydigan tahlillar soni
+    fail_ip, fail_all = RateLimiter(5, 900), RateLimiter(40, 3600)     # noto'g'ri kod urinishlari: IP bo'yicha va umumiy
 
     @app.before_request
     def guard():
@@ -119,6 +172,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         if app.config["LOCAL_ONLY"] and not app.config["PUBLIC"] and request.host.rsplit(":", 1)[0] not in LOCAL_HOSTS \
                 and request.host not in LOCAL_HOSTS:
             abort(403)
+        if gated and request.endpoint not in ("login", "healthz", "static") and not session.get("ok"):
+            if request.path.startswith("/api/"):
+                return jsonify(ok=False, message="Avval kirish kodini kiriting."), 401
+            return redirect(url_for("login"))
 
     @app.after_request
     def security_headers(resp: Response) -> Response:
@@ -132,13 +189,45 @@ def create_app(test_config: dict | None = None) -> Flask:
             "connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
         if app.config["PUBLIC"] and request.is_secure:
             resp.headers["Strict-Transport-Security"] = "max-age=31536000"
+        if gated:
+            resp.headers["Cache-Control"] = "no-store"      # kirishdan keyingi sahifalar keshda qolmasin
         return resp
 
+    @app.get("/healthz")
+    def healthz():
+        return "ok"                                        # Render sog'liq tekshiruvi (kirishsiz)
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if not gated:
+            return redirect(url_for("index"))
+        if request.method == "GET":
+            return render_template("login.html", error=None)
+        now, ip = time.time(), request.remote_addr or "?"
+        if fail_ip.count(ip, now) >= 5 or fail_all.count("*", now) >= 40:
+            resp = render_template("login.html", error="Juda ko'p noto'g'ri urinish. Bir necha daqiqadan so'ng urinib ko'ring.")
+            return Response(resp, status=429, headers={"Retry-After": "600"})
+        entered = (request.form.get("code") or "").strip()
+        if hmac.compare_digest(entered.encode("utf-8"), access_code.encode("utf-8")):
+            session.clear()
+            session["ok"] = True
+            session.permanent = True
+            return redirect(url_for("index"), 303)
+        fail_ip.allow(ip, now)                              # faqat noto'g'ri urinishlar sanaladi
+        fail_all.allow("*", now)
+        return render_template("login.html", error="Kod noto'g'ri."), 401
+
+    @app.post("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("login"), 303)
+
     def page(status: int = 200, **kw):
-        defaults = dict(form={"code": "", "function": "", "engine": "offline" if public else "sonnet",
+        defaults = dict(form={"code": "", "function": "", "engine": "offline" if (public and not server_key) else "sonnet",
                               "effort": "medium", "lang": "uz", "custom_model": ""},
                         engines=ENGINES, samples=samples, data=None, error=None, rid=None, public=public,
-                        native=sandbox.native_allowed(), has_key=bool(os.environ.get("ANTHROPIC_API_KEY")))
+                        native=sandbox.native_allowed(), has_key=bool(os.environ.get("ANTHROPIC_API_KEY")),
+                        gated=gated, server_key=server_key)
         defaults.update(kw)
         return render_template("index.html", **defaults), status
 
@@ -162,7 +251,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         if public and _has_include(form["code"]):
             return page(form=shown, error="Public demoda `#include` qatorlari qo'llab-quvvatlanmaydi — "
                         "faqat funksiyaning o'zini joylang (turlar avtomatik qo'shiladi).")
-        engine = form["engine"] or ("offline" if public else "sonnet")
+        engine = form["engine"] or ("offline" if (public and not server_key) else "sonnet")
         if engine == "custom":
             engine = form["custom_model"].strip()
             if not engine:
@@ -170,9 +259,13 @@ def create_app(test_config: dict | None = None) -> Flask:
                                               "(masalan: claude-sonnet-5-5).")
         offline = engine == "offline"
         api_key = form["api_key"].strip() or None
-        if public and not offline and not api_key:
+        if public and not offline and not api_key and not server_key:
             return page(form=shown, error="Claude modeli uchun o'z API kalitingizni kiriting "
                         "(sk-ant-...). Kalit saqlanmaydi. Yoki bepul Offline rejimni tanlang.")
+        uses_server_key = not offline and not api_key and server_key
+        if uses_server_key and not budget.allow():
+            return page(form=shown, error="Bugungi Claude byudjeti tugadi (xavfsizlik chegarasi). Offline rejim ishlayveradi; "
+                        "ertaga yoki chegarani oshirgach Claude yana ishlaydi.")
         if analyze_limiter is not None and not analyze_limiter.allow(request.remote_addr or "?", time.time()):
             resp, _ = page(form=shown, error="So'rovlar juda tez-tez yuborilyapti. Bir necha daqiqadan so'ng urinib ko'ring.")
             return Response(resp, status=429, headers={"Retry-After": "120"})
@@ -194,6 +287,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                             "yoki boshqa funksiyani tanlab ko'ring.")
         finally:
             slots.release()
+        if uses_server_key:
+            budget.add(sum(r.usage.cost_usd for r in reps))
         rid = uuid.uuid4().hex[:12]
         results[rid] = (parsed, reps)
         while len(results) > 20:

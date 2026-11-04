@@ -807,3 +807,43 @@ yig'ilgan; `highlight.js` loyihaning o'zidan (CDN yo'q, qat'iy CSP); backtick'la
   hosila konstantalar (`x == (1<<20)`) va statik holat desinxronini sinamaydi; unflatten murakkab holatlar mashinasi
   (ichma-ich `switch`, `while (st != 9)` shakli) va chaqiruv argumentlari ichidagi MBA'ni yechmaydi; Claude rejimi
   va `docker build` haqiqiy muhitda sinalmagan.
+
+---
+
+## 11-bosqich. Yopiq demo: kirish kodi, server kaliti va to'liq tekshiruv (internetga chiqarish uchun)
+
+**Foydalanuvchi so'rovi:** *"Mayli, API'imni serverga qo'y, saytga parol bilan kiradigan qil (4 xonali oddiy kod), va loyiha
+ishlashi kerak — 'Tekshirilmadi' degan gapga tushunmadim."*
+
+**Muammo.** 10-bosqichda internetga chiqarish **begonalarga ochiq** demo deb loyihalangan edi: u yerda begona kodni serverda
+ishga tushirish xavfli, shuning uchun tekshiruv o'chirilgan va natija «Tekshirilmadi» bo'lgan. Siz uchun maqsad boshqa:
+demo faqat siz va ustoz uchun. Ochiq saytning cheklovlari bu maqsadda foydasiz ekan: loyiha "ishlamayotgandek" ko'ringan.
+
+**Yechim: yopiq demo.** Kirish kodi xavf modelini o'zgartiradi (kodni faqat parolni biladiganlar yuboradi), shuning
+uchun to'liq ishlashni xavfsiz yoqish mumkin. Lekin kuchsiz (4 xonali) parol + serverdagi API kalit + kodni ishga tushirish
+birlashganda yangi xavf paydo bo'ladi, shuning uchun qatlamlar qo'shildi:
+
+1. **Kirish kodi** (`DEOBF_ACCESS_CODE`): saytning hamma yo'li (natijalarni yuklab olish ham) kodsiz yopiq; `/healthz` va
+   statik fayllar ochiq (Render tekshiruvi va login sahifasi uchun).
+2. **Urinishlar cheklovi:** noto'g'ri kod — bitta IP'dan 15 daqiqada 5 ta, jami soatiga 40 ta (4 xonali kodni terib topish
+   o'rtacha ~5 kun oladi, shu paytda sayt vaqtincha yopiladi). Taqqoslash `hmac.compare_digest` bilan.
+3. **Server kaliti** (`DEOBF_USE_SERVER_KEY`): faqat kirgan foydalanuvchi uchun; kirish kodisiz yoqilsa, server **ishga
+   tushmaydi** (adashib kalitni hammaga ochmaslik uchun). Kalit repoda yo'q: `render.yaml` da `sync: false`.
+4. **Kunlik byudjet** (`DEOBF_DAILY_BUDGET_USD`, standart $2): oshsa, Claude to'xtaydi, offline ishlayveradi.
+5. **Kodni alohida foydalanuvchi nomidan ishga tushirish** (`DEOBF_SANDBOX_UID`): server `root`, tekshirilayotgan kod esa
+   huquqsiz `sandbox` foydalanuvchisi nomidan (`setuid`). U serverning muhit o'zgaruvchilarini (`/proc/<pid>/environ`,
+   ya'ni API kalit) o'qiy olmaydi. Haqiqiy sinov: bola jarayon `uid=10002`, o'qishga urinish — `Permission denied`.
+   Server ishga tushganda bu ajratish **o'zi sinab ko'riladi**; o'tmasa, kod ishga tushirilmaydi (kalit himoyasi).
+6. `Dockerfile`: gcc qaytarildi, `sandbox` foydalanuvchisi yaratildi; `render.yaml`: maxfiy qiymatlarni Render so'raydi.
+
+**Sinov.** 10 ta yangi test (`tests/test_gated.py`): kodsiz yopiqlik, noto'g'ri/to'g'ri kod, cheklov (IP va umumiy), sessiya
+cookie bayroqlari, server kalitining xavfsiz sozlama talabi, byudjet to'xtatishi, kod ishga tushirish shartlari,
+**haqiqiy foydalanuvchi ajratishi** va shu ajratish bilan **to'liq differensial test**. Haqiqiy Chromium'da butun zanjir
+(Render'dagi sozlamalar bilan): `/login` → noto'g'ri kod → to'g'ri kod → offline tahlil **«Tasdiqlandi. 2000 test»** →
+Claude (soxta kalit) Anthropic'ga yetib borib tushunarli xato qaytardi.
+
+**Eslatma (xavfsizlik).** Sizning kirish kodingiz (4 xonali son) repozitoriyga **yozilmadi**: testlarda boshqa tasodifiy
+qiymat ishlatiladi; haqiqiy kod faqat Render'ning maxfiy sozlamasida bo'ladi.
+**Ochiq cheklovlar:** 4 xonali kod kuchsiz (uzunroq qo'yish va Anthropic'da oylik limit belgilash tavsiya etiladi);
+tekshirilayotgan kod huquqsiz bo'lsa ham tarmoqqa chiqa oladi va yadro izolyatsiyasi (gVisor/VM) yo'q — faqat ishonchli
+kishilar kod yuborsin; haqiqiy Render joylashi va `docker build` bu yerda ishga tushirilmagan.

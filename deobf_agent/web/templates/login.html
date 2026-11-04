@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kirish — Deobf Agent</title>
+<link rel="icon" href="data:,">
+{% include "_style.html" %}
+</head>
+<body>
+<main style="max-width: 420px">
+<header><h1>deobf-agent</h1><span>yopiq demo</span></header>
+<form method="post" action="{{ url_for('login') }}">
+  <p><label for="code"><b>Kirish kodi</b></label></p>
+  <p><input type="password" id="code" name="code" inputmode="numeric" autocomplete="off" autofocus
+            style="width: 100%; font-size: 18px; letter-spacing: .3em; padding: 8px"></p>
+  <div class="actions"><button type="submit">Kirish</button></div>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+</form>
+<p class="muted" style="margin-top: 24px">Bu sahifa faqat kodni biladiganlar uchun. Kodni loyiha egasidan oling.</p>
+</main>
+</body>
+</html>

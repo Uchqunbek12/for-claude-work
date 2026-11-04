@@ -1,13 +1,32 @@
 # Render.com (bepul reja) uchun sozlama. Repozitoriyni ulab, "Blueprint" sifatida tanlang.
 # Batafsil: docs/04_internetga_chiqarish.md
+#
+# MUHIM: maxfiy qiymatlar (sync: false) bu faylda YO'Q. Blueprint yaratayotganda Render ularni sizdan so'raydi va
+# faqat o'z sozlamalarida saqlaydi (GitHub'ga tushmaydi):
+#   DEOBF_ACCESS_CODE  — saytga kirish kodi (masalan, 4 xonali son)
+#   ANTHROPIC_API_KEY  — sizning Claude API kalitingiz (sk-ant-...)
 services:
   - type: web
     name: deobf-agent
     runtime: docker
     plan: free
-    healthCheckPath: /
+    healthCheckPath: /healthz
     envVars:
       - key: DEOBF_PUBLIC
         value: "1"
       - key: DEOBF_TRUSTED_PROXIES      # Render bitta proksi orqasida: haqiqiy mijoz IP'si olinadi
         value: "1"
+      - key: DEOBF_ACCESS_CODE          # kirish kodi: kodsiz saytga kirib bo'lmaydi (urinishlar cheklangan)
+        sync: false
+      - key: ANTHROPIC_API_KEY          # server kaliti: faqat kod bilan kirganlar uchun ishlaydi
+        sync: false
+      - key: DEOBF_USE_SERVER_KEY       # kirganlar uchun serverdagi kalitdan foydalanish (kodsiz ishlamaydi)
+        value: "1"
+      - key: DEOBF_DAILY_BUDGET_USD     # kunlik Claude xarajati chegarasi (dollar)
+        value: "2"
+      - key: DEOBF_NATIVE               # kirganlar uchun to'liq tekshiruv (gcc + differensial test)
+        value: "1"
+      - key: DEOBF_SANDBOX_UID          # tekshirilayotgan kod shu huquqsiz foydalanuvchi nomidan ishlaydi
+        value: "10002"
+      - key: DEOBF_SESSION_SECRET       # sessiya cookie imzosi: Render o'zi tasodifiy qiymat yaratadi
+        generateValue: true

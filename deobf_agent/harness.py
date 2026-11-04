@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import re
 import secrets
-import tempfile
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
@@ -653,7 +652,7 @@ def differential_test(code_a: str, func_a: str, code_b: str, func_b: str,
     gvars = find_globals(code_a + "\n" + code_b, set(blobs) | names)
     code_a, code_b = declare_globals(code_a, gvars), declare_globals(code_b, gvars)
 
-    with tempfile.TemporaryDirectory(prefix="deobf_diff_") as tmp:
+    with sandbox.workdir("deobf_diff_") as tmp:
         return _run_diff(Path(tmp), code_a, func_a, code_b, func_b, ret_type, param_types, kinds, rkind,
                          n_tests, blobs, gvars, defined)
 

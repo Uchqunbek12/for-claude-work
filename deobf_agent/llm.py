@@ -135,8 +135,9 @@ _KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}")
 
 
 def _server_key_allowed(api_key: str | None) -> bool:
-    """Public rejimda server kalitiga (.env / muhit) hech qachon tushib ketmaymiz — faqat tashrif buyuruvchining kaliti."""
-    return bool(api_key) or not sandbox.PUBLIC
+    """Public rejimda server kalitiga (.env / muhit) tushib ketmaymiz — faqat tashrif buyuruvchining kaliti. Istisno:
+    operator DEOBF_USE_SERVER_KEY=1 qo'ygan (u faqat kirish kodi bilan birga ishlaydi: app.create_app tekshiradi)."""
+    return bool(api_key) or not sandbox.PUBLIC or sandbox.USE_SERVER_KEY
 
 
 def _api_error_text(exc: Exception, model_id: str, key: str = "") -> str:

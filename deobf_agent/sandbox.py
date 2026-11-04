@@ -2,21 +2,25 @@
 
 Vosita foydalanuvchi bergan kodni kompilyatsiya qiladi va ishga tushiradi — bu uning asosiy ishi
 (differensial test). O'z kompyuteringizda bu xavfsiz, chunki kodni o'zingiz berasiz. Internetga
-chiqarilganda esa kodni begona odamlar beradi, shuning uchun himoya qatlamlari kerak:
+chiqarilganda esa kodni boshqa odamlar yuborishi mumkin, shuning uchun himoya qatlamlari kerak:
 
   * muhit tozalanadi — ishga tushirilgan dasturga faqat PATH/LANG kabi zarur o'zgaruvchilar beriladi,
     hech qanday kalit yoki maxfiy qiymat uzatilmaydi;
   * resurs chegaralari (Linux/macOS): protsessor vaqti, xotira, yoziladigan fayl hajmi;
     public rejimda jarayonlar soni va ochiq fayllar soni ham cheklanadi;
-  * vaqt tugasa butun jarayonlar guruhi to'xtatiladi (dastur yaratgan bola jarayonlar ham).
+  * vaqt tugasa butun jarayonlar guruhi to'xtatiladi (dastur yaratgan bola jarayonlar ham);
+  * ALOHIDA FOYDALANUVCHI (DEOBF_SANDBOX_UID): server root bo'lsa, tekshirilayotgan kod boshqa, huquqsiz
+    foydalanuvchi nomidan ishlaydi. Shunda u serverning muhit o'zgaruvchilarini (`/proc/<pid>/environ`, ya'ni API
+    kalitni) va xotirasini o'qiy olmaydi. Bu resurs chegaralaridan farqli ravishda HAQIQIY ajratish.
 
-Public rejimda bu qatlamlar yetarli emas, shuning uchun kod umuman ishga tushirilmaydi (native_allowed).
-Eng muhim himoya baribir tashqarida: server konteynerda, oddiy (root bo'lmagan) foydalanuvchi
-nomidan ishlaydi va serverda hech qanday maxfiy kalit saqlanmaydi (docs/04_internetga_chiqarish.md).
+Public rejimda (DEOBF_PUBLIC=1) kod standart holatda umuman ishga tushirilmaydi (native_allowed). Operator uni faqat
+kirish paroli (DEOBF_ACCESS_CODE) bilan birga yoqishi mumkin (configure()), server kaliti ishlatilsa — faqat alohida
+foydalanuvchi ishlayotganini tekshirgandan keyin. Batafsil: docs/04_internetga_chiqarish.md.
 """
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess
@@ -24,16 +28,61 @@ import sys
 import tempfile
 from dataclasses import dataclass
 
-PUBLIC = os.environ.get("DEOBF_PUBLIC", "") not in ("", "0", "false")
-# Public rejimda tashrif buyuruvchining kodi serverda gcc bilan kompilyatsiya qilinmaydi va ishga tushirilmaydi:
-# bu sandbox (resurs chegaralari) haqiqiy izolyatsiya emas — ishonchli izolyatsiya (alohida konteyner/VM, tarmoqsiz,
-# kalitsiz) mavjudligini operatorning o'zi DEOBF_NATIVE=1 bilan tasdiqlaydi (docs/04_internetga_chiqarish.md).
-NATIVE = os.environ.get("DEOBF_NATIVE", "") not in ("", "0", "false")
+
+def _flag(name: str) -> bool:
+    return os.environ.get(name, "") not in ("", "0", "false")
+
+
+PUBLIC = _flag("DEOBF_PUBLIC")
+NATIVE = _flag("DEOBF_NATIVE")                  # public rejimda kodni ishga tushirishga operator ruxsati
+USE_SERVER_KEY = _flag("DEOBF_USE_SERVER_KEY")  # kirgan foydalanuvchi uchun serverdagi ANTHROPIC_API_KEY ishlatilsinmi
+SANDBOX_UID = int(os.environ.get("DEOBF_SANDBOX_UID", "0") or 0)       # 0 = ajratish yo'q
 
 
 def native_allowed() -> bool:
     """Foydalanuvchi kodini kompilyatsiya qilish va ishga tushirishga ruxsat bormi?"""
     return not PUBLIC or NATIVE
+
+
+def _drop_active() -> bool:
+    return bool(SANDBOX_UID) and hasattr(os, "geteuid") and os.geteuid() == 0
+
+
+def configure(has_access_code: bool, log=print) -> None:
+    """Public rejimdagi xavfli kombinatsiyalarni o'chiradi (app ishga tushganda chaqiriladi).
+
+    * kodni ishga tushirish faqat kirish paroli bor bo'lsa mumkin (begonalar kod yubora olmasin);
+    * server kaliti ishlatilsa — kod alohida foydalanuvchi nomidan ishlashi SINALADI; sinov o'tmasa, kod ishga
+      tushirilmaydi (kalit o'g'irlanmasligi uchun).
+    """
+    global NATIVE
+    if PUBLIC and NATIVE and not has_access_code:
+        NATIVE = False
+        log("OGOHLANTIRISH: DEOBF_NATIVE kirish parolisiz ishlamaydi — kod ishga tushirilmaydi.")
+    if PUBLIC and NATIVE and USE_SERVER_KEY and not selftest_isolation():
+        NATIVE = False
+        log("OGOHLANTIRISH: kod alohida foydalanuvchi nomidan ishlay olmadi (DEOBF_SANDBOX_UID + root kerak) — "
+            "server kaliti himoyasi uchun kod ishga tushirilmaydi.")
+
+
+def selftest_isolation() -> bool:
+    """Bola jarayon haqiqatan boshqa foydalanuvchi nomidan ishlaydimi va serverning muhitini o'qiy olmaydimi?"""
+    if not _drop_active():
+        return False
+    me = run(["id", "-u"], timeout=10)
+    leak = run(["sh", "-c", f"cat /proc/{os.getpid()}/environ >/dev/null 2>&1 && echo LEAK || echo SAFE"], timeout=10)
+    return me.stdout.strip() == str(SANDBOX_UID) and leak.stdout.strip() == "SAFE"
+
+
+@contextlib.contextmanager
+def workdir(prefix: str):
+    """Vaqtincha ish papkasi. Kod alohida foydalanuvchi nomidan ishlasa, papka unga ham ochiq bo'ladi."""
+    with tempfile.TemporaryDirectory(prefix=prefix) as tmp:
+        if _drop_active():
+            os.chmod(tmp, 0o777)
+        yield tmp
+
+
 _KEEP_ENV = ("PATH", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT", "SystemRoot", "WINDIR", "HOME")
 
 
@@ -47,7 +96,10 @@ class RunResult:
 
 def clean_env() -> dict[str, str]:
     """Ishga tushiriladigan dastur uchun minimal muhit (kalitlar va maxfiy qiymatlarsiz)."""
-    return {k: v for k, v in os.environ.items() if k in _KEEP_ENV}
+    env = {k: v for k, v in os.environ.items() if k in _KEEP_ENV}
+    if _drop_active():
+        env["HOME"] = "/tmp"           # huquqsiz foydalanuvchi root'ning uy papkasini o'qiy olmaydi
+    return env
 
 
 def _limits(cpu_sec: int, mem_mb: int):
@@ -65,6 +117,10 @@ def _limits(cpu_sec: int, mem_mb: int):
                 resource.setrlimit(res, (value, value))
             except (ValueError, OSError):
                 pass
+        if _drop_active():                               # eng oxirida: root huquqlarini tashlaymiz (qaytib bo'lmaydi)
+            os.setgroups([])
+            os.setgid(SANDBOX_UID)
+            os.setuid(SANDBOX_UID)
     return apply
 
 

@@ -12,9 +12,13 @@
 </head>
 <body data-check-url="{{ url_for('check_key') }}" data-public="{{ 1 if public else 0 }}">
 <main>
-<header><h1>deobf-agent</h1><span>chalkash psevdokodni soddalashtiradi va tushuntiradi</span></header>
+<header><h1>deobf-agent</h1><span>chalkash psevdokodni soddalashtiradi va tushuntiradi</span>
+{% if gated %}<form method="post" action="{{ url_for('logout') }}" style="margin-left:auto"><button type="submit" class="link" style="min-height:32px;padding:2px 10px">Chiqish</button></form>{% endif %}</header>
 
-{% if public %}<p class="note">Ochiq demo. Offline rejim bepul. Claude uchun o'z kalitingizni kiriting — u saqlanmaydi.
+{% if gated %}<p class="note">Yopiq demo: kod bilan kirdingiz.
+{% if server_key %}Claude server kaliti bilan ishlaydi (kunlik byudjet cheklangan); xohlasangiz o'z kalitingizni ham kiritishingiz mumkin.{% else %}Claude uchun o'z kalitingizni kiriting.{% endif %}
+{% if native %}Kodingiz serverda huquqsiz alohida foydalanuvchi nomidan kompilyatsiya qilinib sinab ko'riladi (to'liq tekshiruv).{% else %}Server kodni ishga tushirmaydi, shuning uchun natija «Tekshirilmadi» deb belgilanadi.{% endif %}</p>
+{% elif public %}<p class="note">Ochiq demo. Offline rejim bepul. Claude uchun o'z kalitingizni kiriting — u saqlanmaydi.
 {% if not native %}Xavfsizlik uchun bu yerda kodingiz serverda ishga tushirilmaydi, shuning uchun natija «Tekshirilmadi» deb belgilanadi
 (to'liq tekshiruv — vositani o'z kompyuteringizda ishlatganda).{% endif %}</p>{% endif %}
 
@@ -42,14 +46,14 @@
       {% for v, t in [("uz", "O'zbekcha"), ("ru", "Русский"), ("en", "English")] %}<option value="{{ v }}" {% if form.lang == v %}selected{% endif %}>{{ t }}</option>{% endfor %}
     </select></label>
     <label>Funksiya <input type="text" id="function" name="function" value="{{ form.function }}" placeholder="hammasi" size="12"></label>
-    {% if public %}<label id="key-wrap">Sizning kalitingiz
+    {% if public %}<label id="key-wrap">Sizning kalitingiz{% if server_key %} (ixtiyoriy){% endif %}
       <input type="password" id="api_key" name="api_key" autocomplete="off" placeholder="sk-ant-..." size="18"></label>{% endif %}
   </div>
 
   <div class="actions">
     <button type="submit" id="submit">Tahlil qilish</button>
     <button type="button" id="check" class="link">Kalitni tekshirish</button>
-    <span id="status">{% if public %}Kalit faqat shu so'rov uchun ishlatiladi va saqlanmaydi.{% elif has_key %}API kalit bor.{% else %}API kalit yo'q — faqat Offline ishlaydi.{% endif %}</span>
+    <span id="status">{% if public and server_key %}Server kaliti ulangan.{% elif public %}Kalit faqat shu so'rov uchun ishlatiladi va saqlanmaydi.{% elif has_key %}API kalit bor.{% else %}API kalit yo'q — faqat Offline ishlaydi.{% endif %}</span>
   </div>
   {% if error %}<p class="error" id="error" role="alert" tabindex="-1">{{ error }}</p>{% endif %}
 </form>
