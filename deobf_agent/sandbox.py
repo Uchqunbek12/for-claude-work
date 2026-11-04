@@ -33,15 +33,22 @@ def _flag(name: str) -> bool:
     return os.environ.get(name, "") not in ("", "0", "false")
 
 
+def _tri(name: str):
+    """None — o'rnatilmagan (avtomatik); True/False — operator aniq aytgan."""
+    v = os.environ.get(name, "").strip().lower()
+    return None if v == "" else v not in ("0", "false", "no")
+
+
 PUBLIC = _flag("DEOBF_PUBLIC")
-NATIVE = _flag("DEOBF_NATIVE")                  # public rejimda kodni ishga tushirishga operator ruxsati
-USE_SERVER_KEY = _flag("DEOBF_USE_SERVER_KEY")  # kirgan foydalanuvchi uchun serverdagi ANTHROPIC_API_KEY ishlatilsinmi
+# Kirish kodi (DEOBF_ACCESS_CODE) o'rnatilgan bo'lsa, quyidagi ikkisi AVTOMATIK yoqiladi (o'chirish uchun "0" yozing):
+NATIVE = _tri("DEOBF_NATIVE")                  # kodni ishga tushirish (to'liq tekshiruv)
+USE_SERVER_KEY = _tri("DEOBF_USE_SERVER_KEY")  # kirgan foydalanuvchi uchun serverdagi ANTHROPIC_API_KEY
 SANDBOX_UID = int(os.environ.get("DEOBF_SANDBOX_UID", "0") or 0)       # 0 = ajratish yo'q
 
 
 def native_allowed() -> bool:
     """Foydalanuvchi kodini kompilyatsiya qilish va ishga tushirishga ruxsat bormi?"""
-    return not PUBLIC or NATIVE
+    return not PUBLIC or bool(NATIVE)
 
 
 def _drop_active() -> bool:
@@ -55,7 +62,11 @@ def configure(has_access_code: bool, log=print) -> None:
     * server kaliti ishlatilsa — kod alohida foydalanuvchi nomidan ishlashi SINALADI; sinov o'tmasa, kod ishga
       tushirilmaydi (kalit o'g'irlanmasligi uchun).
     """
-    global NATIVE
+    global NATIVE, USE_SERVER_KEY
+    if has_access_code:                                # kirish kodi bor: o'rnatilmagan bayroqlar avtomatik yoqiladi
+        USE_SERVER_KEY = True if USE_SERVER_KEY is None else USE_SERVER_KEY
+        NATIVE = True if NATIVE is None else NATIVE
+    NATIVE, USE_SERVER_KEY = bool(NATIVE), bool(USE_SERVER_KEY)
     if PUBLIC and NATIVE and not has_access_code:
         NATIVE = False
         log("OGOHLANTIRISH: DEOBF_NATIVE kirish parolisiz ishlamaydi — kod ishga tushirilmaydi.")

@@ -21,7 +21,7 @@ from .prompts import number_lines
 STYLE_NAMES = {"ida": "IDA (Hex-Rays)", "ghidra": "Ghidra", "angr": "angr", "c": "oddiy C"}
 CONFIDENCE_UZ = {"low": "past", "medium": "o'rta", "high": "yuqori"}
 # HTML shablonlar (Web UI va saqlanadigan hisobot) uchun umumiy o'zgaruvchilar
-TEMPLATE_GLOBALS = dict(tech_names=TECH_NAMES_UZ, style_names=STYLE_NAMES, confidence_uz=CONFIDENCE_UZ)
+TEMPLATE_GLOBALS = dict(site_name="deobf-agent", tech_names=TECH_NAMES_UZ, style_names=STYLE_NAMES, confidence_uz=CONFIDENCE_UZ)
 
 
 def rich(text) -> Markup:

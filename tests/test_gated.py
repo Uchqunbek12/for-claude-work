@@ -139,3 +139,46 @@ def test_model_picker_is_available_after_login(gated):
     html = c.get("/").get_data(as_text=True)
     for value in ("sonnet", "haiku", "opus", "offline", "custom"):          # yopiq demoda "Boshqa model" ham bor
         assert f'<option value="{value}"' in html
+
+
+def test_server_key_and_native_turn_on_automatically_when_access_code_is_set(monkeypatch):
+    # Render'da faqat ikki maydon yaratish yetadi: DEOBF_ACCESS_CODE va ANTHROPIC_API_KEY
+    monkeypatch.setattr(sandbox, "PUBLIC", True)
+    monkeypatch.setattr(sandbox, "NATIVE", None)
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", None)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-SERVERKEYSERVERKEY1234567890")
+    app = create_app({"ACCESS_CODE": CODE})
+    assert sandbox.USE_SERVER_KEY is True
+    c = app.test_client()
+    login(c)
+    assert "Server kaliti ulangan" in c.get("/").get_data(as_text=True)         # "kalitingizni kiriting" demaydi
+    monkeypatch.setattr(sandbox, "NATIVE", None)
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", None)
+    create_app()                                                                  # kirish kodisiz: hech narsa avtomatik yoqilmaydi
+    assert sandbox.USE_SERVER_KEY is False and sandbox.NATIVE is False
+
+
+def test_explicit_zero_turns_features_off_even_with_access_code(monkeypatch):
+    monkeypatch.setattr(sandbox, "PUBLIC", True)
+    monkeypatch.setenv("DEOBF_NATIVE", "0")
+    monkeypatch.setenv("DEOBF_USE_SERVER_KEY", "0")
+    monkeypatch.setattr(sandbox, "NATIVE", sandbox._tri("DEOBF_NATIVE"))
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", sandbox._tri("DEOBF_USE_SERVER_KEY"))
+    create_app({"ACCESS_CODE": CODE})
+    assert sandbox.USE_SERVER_KEY is False and sandbox.NATIVE is False
+
+
+def test_missing_server_key_is_explained_on_the_page(gated, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    c = gated().test_client()
+    login(c)
+    assert "ANTHROPIC_API_KEY" in c.get("/").get_data(as_text=True)               # sababi aniq aytiladi
+
+
+def test_site_name_is_configurable(gated, monkeypatch):
+    monkeypatch.setenv("DEOBF_SITE_NAME", "Kod Ochar")
+    c = gated().test_client()
+    assert "Kod Ochar" in c.get("/login").get_data(as_text=True)
+    login(c)
+    html = c.get("/").get_data(as_text=True)
+    assert "<title>Kod Ochar</title>" in html and "<h1>Kod Ochar</h1>" in html

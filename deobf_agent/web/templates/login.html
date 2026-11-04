@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kirish — Deobf Agent</title>
+<title>Kirish — {{ site_name }}</title>
 <link rel="icon" href="data:,">
 {% include "_style.html" %}
 </head>
 <body>
 <main style="max-width: 420px">
-<header><h1>deobf-agent</h1><span>yopiq demo</span></header>
+<header><h1>{{ site_name }}</h1><span>yopiq demo</span></header>
 <form method="post" action="{{ url_for('login') }}">
   <p><label for="code"><b>Kirish kodi</b></label></p>
   <p><input type="password" id="code" name="code" inputmode="numeric" autocomplete="off" autofocus

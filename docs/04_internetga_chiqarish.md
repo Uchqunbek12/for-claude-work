@@ -13,10 +13,10 @@ Bu yo'riqnoma vositani internetga — havola orqali ochiladigan manzilga — qan
 
 | | Shaxsiy (kompyuteringizda) | Ochiq demo (kodsiz, hamma uchun) | **Yopiq demo** (kod bilan) |
 |---|---|---|---|
-| Yoqilishi | `deobf web` | `DEOBF_PUBLIC=1` | `DEOBF_PUBLIC=1` + `DEOBF_ACCESS_CODE=<kod>` |
+| Yoqilishi | `deobf web` | `DEOBF_PUBLIC=1` | `DEOBF_PUBLIC=1` + `DEOBF_ACCESS_CODE=<kod>`; server kaliti va to'liq tekshiruv **avtomatik** yoqiladi (kalit `ANTHROPIC_API_KEY` bo'lsa) |
 | Kim kiradi | faqat siz | hamma | kodni biladiganlar |
-| API kalit | `.env` dagi sizniki | serverda yo'q; har kim o'zinikini kiritadi | **serverdagi sizning kalitingiz** (`DEOBF_USE_SERVER_KEY=1`) yoki o'zinikini kiritish |
-| Kod ishga tushiriladimi (to'liq tekshiruv) | ha | **yo'q** → «Tekshirilmadi» | **ha** (`DEOBF_NATIVE=1`), alohida huquqsiz foydalanuvchi nomidan |
+| API kalit | `.env` dagi sizniki | serverda yo'q; har kim o'zinikini kiritadi | **serverdagi sizning kalitingiz** (`ANTHROPIC_API_KEY`) yoki o'zinikini kiritish |
+| Kod ishga tushiriladimi (to'liq tekshiruv) | ha | **yo'q** → «Tekshirilmadi» | **ha**, alohida huquqsiz foydalanuvchi nomidan (ajratish ishlasa) |
 | Cheklovlar | yumshoq | qattiq | qattiq + kunlik Claude byudjeti |
 
 **Nega «ochiq demo»da «Tekshirilmadi» chiqadi, yopiq demoda esa yo'q?** Tekshiruv kodni *ishga tushiradi*. Kodni hamma
@@ -75,6 +75,11 @@ Repozitoriyadagi `Dockerfile` va `render.yaml` tayyor. GitHub'da asosiy (default
 6. Namoyishdan oldin sahifani bir marta oching: bepul reja 15 daqiqa foydalanilmasa «uxlab qoladi» va birinchi
    ochilish 30–60 soniya sekinroq bo'ladi.
 
+**Servisni qo'lda yaratgan bo'lsangiz** (Blueprint o'rniga «New → Web Service»): Environment bo'limiga **ikkita** maydon yozish yetadi:
+`DEOBF_ACCESS_CODE` (kirish kodi) va `ANTHROPIC_API_KEY` (kalit). Qolganlari (`DEOBF_PUBLIC`, `DEOBF_TRUSTED_PROXIES`,
+`DEOBF_SANDBOX_UID`) Dockerfile'da berilgan, server kaliti va to'liq tekshiruv esa kirish kodi bor bo'lgani uchun o'zi yoqiladi.
+O'zgartirgandan keyin Render servisni qayta ishga tushiradi (yoki **Manual Deploy → Deploy latest commit**).
+
 ### 3.3. Nima uchun aynan shunday
 
 | Tanlov | Sabab |
@@ -85,6 +90,20 @@ Repozitoriyadagi `Dockerfile` va `render.yaml` tayyor. GitHub'da asosiy (default
 | `/healthz` (kirishsiz) | Render sog'liq tekshiruvi kodsiz ham ishlashi uchun. |
 | `DEOBF_TRUSTED_PROXIES=1` | Render proksi orqasida; shunda urinish cheklovi har bir haqiqiy mijoz IP'si uchun. To'g'ridan-to'g'ri internetga ochilsa o'rnatilmaydi. |
 | `DEOBF_SESSION_SECRET` (Render o'zi yaratadi) | Sessiya cookie imzosi. |
+
+### 3.3.1. Sayt nomi va havola
+
+* **Sahifadagi nom** (sarlavha va tepada): Render → Environment → `DEOBF_SITE_NAME` (masalan, `Kod Ochar`). Bo'sh bo'lsa `deobf-agent`.
+* **Havola nomi** (`https://<nom>.onrender.com`): Render → servis → **Settings → Name**. Havola shu nomdan olinadi; band bo'lmasa o'zgaradi.
+
+### 3.3.2. Muammolar
+
+| Belgi | Sabab va yechim |
+|---|---|
+| Kirgandan keyin ham «Serverda API kalit topilmadi… o'z kalitingizni kiriting» | Render → Environment da `ANTHROPIC_API_KEY` yo'q yoki nomi boshqacha yozilgan. To'g'ri nom: `ANTHROPIC_API_KEY`. |
+| «Server kodni ishga tushirmaydi… Tekshirilmadi» | Render konteynerda kodni alohida foydalanuvchi nomidan ishga tushirishga ruxsat bermadi (log'da «OGOHLANTIRISH» bor). Claude va Offline ishlayveradi, faqat gcc + test o'chadi. |
+| Kod yozilganda ham kirmaydi / «Juda ko'p noto'g'ri urinish» | Noto'g'ri urinishlar cheklovi (IP: 15 daqiqada 5 ta). Biroz kuting. |
+| Servis ishga tushmaydi, log'da `DEOBF_USE_SERVER_KEY ... DEOBF_ACCESS_CODE` | `DEOBF_USE_SERVER_KEY=1` yozilgan, lekin `DEOBF_ACCESS_CODE` bo'sh. Kodni yozing (yoki `DEOBF_USE_SERVER_KEY` ni olib tashlang). |
 
 ### 3.4. Hali sinalmaganlar (halol)
 

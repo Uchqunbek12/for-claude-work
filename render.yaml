@@ -20,13 +20,10 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY          # server kaliti: faqat kod bilan kirganlar uchun ishlaydi
         sync: false
-      - key: DEOBF_USE_SERVER_KEY       # kirganlar uchun serverdagi kalitdan foydalanish (kodsiz ishlamaydi)
-        value: "1"
       - key: DEOBF_DAILY_BUDGET_USD     # kunlik Claude xarajati chegarasi (dollar)
         value: "2"
-      - key: DEOBF_NATIVE               # kirganlar uchun to'liq tekshiruv (gcc + differensial test)
-        value: "1"
-      - key: DEOBF_SANDBOX_UID          # tekshirilayotgan kod shu huquqsiz foydalanuvchi nomidan ishlaydi
-        value: "10002"
+      # Kirish kodi bor bo'lgani uchun server kaliti va to'liq tekshiruv (alohida huquqsiz foydalanuvchi nomidan)
+      # AVTOMATIK yoqiladi. O'chirish uchun DEOBF_USE_SERVER_KEY=0 yoki DEOBF_NATIVE=0 qo'shing.
+      # DEOBF_SANDBOX_UID (10002) Dockerfile'da berilgan. Sayt nomi: DEOBF_SITE_NAME (ixtiyoriy).
       - key: DEOBF_SESSION_SECRET       # sessiya cookie imzosi: Render o'zi tasodifiy qiymat yaratadi
         generateValue: true

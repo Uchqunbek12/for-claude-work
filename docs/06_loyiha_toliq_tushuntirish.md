@@ -708,7 +708,8 @@ Kodni topgan odam sizning kalitingiz bilan (byudjet chegarasida) Claude'dan foyd
 2. [render.com](https://render.com) ga GitHub bilan kiring → **New → Blueprint** → `Uchqunbek12/for-claude-work`.
    GitHub'dagi asosiy branch aynan bizning branchimiz, shuning uchun Render uni o'zi oladi.
 3. Render **ikkita qiymat** so'raydi: `DEOBF_ACCESS_CODE` (kirish kodi) va `ANTHROPIC_API_KEY` (Claude kaliti). Ularni
-   **faqat shu yerga** kiriting (chatga yoki GitHub'ga emas).
+   **faqat shu yerga** kiriting (chatga yoki GitHub'ga emas). Qolgan sozlamalar (server kaliti, to'liq tekshiruv) kirish kodi
+   bo'lgani uchun **avtomatik** yoqiladi. Sayt nomini `DEOBF_SITE_NAME` bilan, havola nomini Render → Settings → Name bilan o'zgartirasiz.
 4. **Apply** bosing, 3–6 daqiqa kuting. Render `https://deobf-agent-xxxx.onrender.com` havolasini beradi.
 5. Havolani ochsangiz, **kirish kodi** so'raladi. Kod bilan kirgach, hammasi ishlaydi.
 6. Bepul reja 15 daqiqa ishlatilmasa uxlab qoladi (birinchi ochilish 30–60 s sekinroq): namoyishdan oldin bir marta oching.

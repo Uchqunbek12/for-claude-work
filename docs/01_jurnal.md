@@ -858,3 +858,16 @@ yordamchini asl nomi bilan chaqirdi; Web UI da «Kalitni tekshirish» tugmasi va
 Shu bilan 10-bosqichdagi "Claude rejimi sinalmagan" da'vosi kichik tanlamada tasdiqlandi. **Cheklov:** tanlama kichik; xato tuzatish
 sikli va zararli kodda rad etish haqiqiy Claude bilan ko'rilmagan. **Xavfsizlik:** kalit chat yozuvida qolgani uchun uni sinovdan
 keyin bekor qilib, yangisini yaratish tavsiya etildi.
+
+### 11.2. Render'da birinchi joylash: ikki tuzatish
+
+Foydalanuvchi saytni Render'ga joyladi (servisni qo'lda yaratib, Environment'ga o'zi maydon qo'shgan) va ikki narsani aytdi:
+(1) kirgandan keyin ham "API kalitingizni kiriting" deydi; (2) nom yoqmadi.
+
+1. **Sabab:** server kaliti faqat `DEOBF_USE_SERVER_KEY=1` bayrog'i bilan yoqilar edi; qo'lda yaratilgan servisda bu bayroq yo'q edi.
+   Sozlash ortiqcha murakkab edi (bu mening dizayn xatom). **Tuzatish:** kirish kodi (`DEOBF_ACCESS_CODE`) bor bo'lsa, server kaliti va
+   to'liq tekshiruv **avtomatik** yoqiladi (aniq `0` bilan o'chiriladi); xavfsizlik shartlari saqlanadi (kirish kodisiz hech narsa
+   yoqilmaydi; server kaliti bilan kod ishga tushirish uchun foydalanuvchi ajratishi sinovdan o'tishi kerak). Endi Render'da
+   ikki maydon yetadi: `DEOBF_ACCESS_CODE`, `ANTHROPIC_API_KEY`. Kalit topilmasa, sahifa sababini aniq yozadi.
+2. **Nom:** sahifadagi nom `DEOBF_SITE_NAME` muhit o'zgaruvchisi bilan o'zgartiriladi (kodga tegmasdan); havola nomi Render'da
+   Settings → Name orqali.
