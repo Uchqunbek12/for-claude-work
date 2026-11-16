@@ -931,6 +931,18 @@ Foydalanuvchi: Claude kaliti almashtirildi, endi DeepSeek API'ni qo'yamiz, loyih
   tekshiruv buni ushladi va offline zaxira olindi. O'lchov: o'ylash yoqilsa to'g'ri chiqadi, lekin Pro + doim o'ylash 132 s va $0.058. **Qaror:** o'rta chuqurlikda birinchi urinish
   o'ylashsiz (tez, arzon), tekshiruv xato topib tuzatish so'ralganda o'ylash avtomatik yoqiladi. Qayta o'lchov: `s2_opaque` ikki marta ham 2-urinishda tasdiqlandi ($0.008, 29 s).
 * **Kutish chegarasi** 90 s (veb-sayt vaqt byudjetiga sig'ishi uchun; `DEOBF_LLM_TIMEOUT` bilan o'zgaradi).
-* **Testlar:** 123 → **156**. Yangilari: so'rov shakli, narx hisobi, bo'sh/noto'g'ri JSON, xatolar kalitni oshkor qilmasligi, **mahalliy HTTP server bilan haqiqiy urllib so'rovi** (sarlavha, qayta urinish),
+* **Testlar:** 123 → **161**. Yangilari: so'rov shakli, narx hisobi, bo'sh/noto'g'ri JSON, xatolar kalitni oshkor qilmasligi, **mahalliy HTTP server bilan haqiqiy urllib so'rovi** (sarlavha, qayta urinish),
   agent sikli (DeepSeek xatosi → tuzatish → tasdiqlash; 402 → offline zaxira), veb (modellar filtri, server kaliti, holat), CLI. `conftest.py` haqiqiy kalitlarni testlardan yashiradi.
 * **Ochiq qolganlar:** zararli kodni rad etish (refusal) haqiqiy DeepSeek'da ko'rilmagan; tanlama kichik; DeepSeek ma'lumotlarni qayerda saqlashi haqida rasmiy siyosatni foydalanuvchi o'zi o'qishi kerak.
+
+## 13-bosqich. Sayt dizayni, «Claude» yozuvlari va oddiy tushuntirish (2026-11-16)
+
+Foydalanuvchi jonli saytning skrinshotini yubordi (`deobfuskatsiya12.onrender.com`): model ro'yxatida faqat Claude bor; fon qorong'i; hujjatdagi savol-javoblar murakkab.
+
+* **Sabab (Claude yozuvlari):** yopiq saytda faqat serverda kaliti bor provayderlarning modellari ko'rsatiladi. Render'da DeepSeek kaliti sayt ko'ra oladigan joyda yo'q edi, eski Claude kaliti esa bor edi, shuning uchun faqat Claude chiqdi.
+* **Tuzatish 1:** kalit **noto'g'ri nomli** o'zgaruvchida turgan bo'lsa (masalan, DeepSeek kaliti `ANTHROPIC_API_KEY` ichida), endi uning shakliga qarab (`sk-ant-` — Claude, boshqa `sk-` — DeepSeek) to'g'ri provayder uchun ishlatiladi va sahifa egasiga o'zgaruvchi nomini tuzatishni aytadi.
+  DeepSeek kaliti umuman bo'lmasa, sahifa buni aniq yozadi (nima qilish kerakligi bilan).
+* **Tuzatish 2:** model ro'yxati guruhlandi (DeepSeek / Claude / Bepul / Boshqa); DeepSeek birinchi.
+* **Tuzatish 3 (dizayn):** sayt **oq fonda** (standart, kompyuterning qorong'i rejimidan qat'i nazar); «Qorong'i fon» tugmasi (`static/theme.js`, CSP'ga mos, tanlov brauzerda eslab qolinadi). Haqiqiy brauzerda 3 holatda (faqat Claude kaliti / DeepSeek kaliti noto'g'ri nomda / to'g'ri nomda) tekshirildi.
+* **Hujjat:** `docs/08_oddiy_tilda_0_dan.md`: loyihani 0 dan, qisqa gaplar va hayotiy misollar bilan; 13 ta oddiy savol-javob; 3 daqiqalik gap; mini lug'at. `docs/07` unga yo'naltiradi.
+* Testlar: 156 → 161.

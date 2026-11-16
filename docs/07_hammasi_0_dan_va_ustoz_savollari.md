@@ -1,10 +1,12 @@
 # 07. Hammasi 0 dan: nima qildik, qayerda qaysi funksiya ishlaydi va ustoz nima so'rashi mumkin
 
+> **Avval [08_oddiy_tilda_0_dan.md](08_oddiy_tilda_0_dan.md) ni o'qing:** u shu loyihani 0 dan, eng oddiy so'zlar bilan tushuntiradi. Bu hujjat esa chuqur ma'lumotnoma (funksiyalar xaritasi, atamalar, 56 ta ustoz savoli).
+>
 > **Bu hujjat kim uchun.** Siz loyihani boshqalarga (ustoz, guruhdoshlar) **o'zingiz tushuntira olishingiz** uchun. Kompyuter
 > tushunchalaridan boshlanadi, har bir atama va har bir muhim ibora alohida izohlanadi, oxirida ustoz berishi mumkin bo'lgan
 > savollar va javoblar bor.
 >
-> **Holat (2026-11-16):** loyiha tayyor, Render'ga joylangan, kirish kodi bilan ochiladigan sayt ishlayapti, 156 ta avtomatik test o'tadi.
+> **Holat (2026-11-16):** loyiha tayyor, Render'ga joylangan, kirish kodi bilan ochiladigan sayt ishlayapti, 161 ta avtomatik test o'tadi.
 > LLM ikki provayderdan biri: **DeepSeek** (standart, `DEEPSEEK_API_KEY` bo'lsa; haqiqiy API bilan sinalgan) yoki **Claude** (`ANTHROPIC_API_KEY`).
 > Bu hujjat `06_loyiha_toliq_tushuntirish.md` ning o'rnini bosadi (06 da test soni va joylash holati eskirgan; mazmuni baribir to'g'ri).
 
@@ -330,7 +332,7 @@ deobf_agent/        ← asosiy dastur (Python paketi)
   web/              ← veb sayt (app.py, templates/, static/)
   data/re_types.h   ← IDA/Ghidra turlari (_DWORD, undefined8...) uchun C sarlavhasi
 samples/            ← 8 ta test namunasi: src/clean (toza), bin (kompilyatsiya), decompiled (angr psevdokodi)
-tests/              ← 156 ta avtomatik test
+tests/              ← 161 ta avtomatik test
 docs/               ← hujjatlar (shu fayl ham)
 scripts/            ← IDA va Ghidra eksport skriptlari, namunalarni yaratish
 Dockerfile, render.yaml   ← internetga chiqarish
@@ -760,7 +762,7 @@ Loyiha 2026-10-08 dan 2026-11-04 gacha 21 ta commit bilan qurildi (batafsil: `do
 | 21 ta realistik IDA/Ghidra uslubidagi kirish (61 funksiya) | **50** tasdiqlandi, 6 `compiled`, 5 `compile_error`, **mismatch — 0** | noto'g'ri natija yo'q; solishtirib bo'lmaganlari (C++ nomlari, ba'zi Ghidra `CONCAT`) ochiq cheklov |
 | Claude Sonnet 5.5 (5 funksiya, haqiqiy API) | hammasi 1-urinishda tasdiqlandi; **$0.024–0.039** / funksiya; 15–24 s | arzon va ishonchli, lekin tanlama kichik |
 | **DeepSeek Flash (8 namuna, haqiqiy API)** | **8 / 8** tasdiqlandi (7 tasi 1-urinishda, `s2_opaque` 2-urinishda); jami **$0.028**, o'rtacha ≈ $0.0035 / funksiya; 8–36 s | Claude'dan ≈ 10 baravar arzon; o'z-o'zini tuzatish sikli haqiqiy modelda ishladi |
-| Avtomatik testlar | **156 / 156** | `python -m pytest -q` |
+| Avtomatik testlar | **161 / 161** | `python -m pytest -q` |
 | Brauzer sinovi (Chromium, kompyuter va telefon o'lchami) | o'tdi | forma, tugmalar, ranglash, kalit holati |
 
 *(8 namunaning to'liq jadvali: `docs/baholash_offline.md`; Claude: `docs/baholash_claude_sonnet.md`; DeepSeek: `docs/baholash_deepseek.md`. 21 kirishlik tekshiruv 10-bosqichda
@@ -789,6 +791,8 @@ o'lchangan.)*
 ---
 
 ## 13. Ustoz savollari va javoblari
+
+> **Murakkab tuyulsa:** avval [08-hujjatdagi 12-bo'lim](08_oddiy_tilda_0_dan.md) (13 ta oddiy savol-javob) va 13-bo'lim (3 daqiqalik gap) ni o'qing. Bu yerdagi javoblar chuqurroq, ustoz qiyin savol bersa kerak bo'ladi.
 
 Har bir javob **qisqa variant** (og'zaki aytish uchun) va kerak bo'lsa **chuqurroq** qismdan iborat. Savollar guruhlangan.
 Eng ko'p so'raladigan 16 tasi **★** bilan belgilangan (jami 56 ta savol).
@@ -956,7 +960,7 @@ Matn bilan ishlash, tez yozish, Anthropic/Flask/pytest kutubxonalari tayyor, ang
 kutishda ketadi.
 
 **D8. Loyiha qanchalik katta?**
-~6500 qator Python (`deobf_agent/`), 156 ta avtomatik test, 8 ta test namunasi, hujjatlar. Eng katta fayllar: `narrate.py` (785),
+~6500 qator Python (`deobf_agent/`), 161 ta avtomatik test, 8 ta test namunasi, hujjatlar. Eng katta fayllar: `narrate.py` (785),
 `harness.py` (731), `detectors.py` (687), `expr.py` (578).
 
 **D9. Qanday testlagansiz?**
@@ -1002,7 +1006,7 @@ to'xtaydi va sozlashni aytadi (9.6).
 
 **★ F1. Natijalaringiz qanday?**
 8/8 namunada psevdokodga ekvivalent; murakkablik 58 → 21 (−64%), qatorlar 216 → 95 (−56%); 21 ta realistik kirishda (61 funksiya) noto'g'ri natija
-(mismatch) 0; 156 ta avtomatik test; DeepSeek Flash: 8/8 tasdiqlandi, jami $0.028; Claude Sonnet: 5/5, ≈ $0.03 / funksiya (11-bo'lim).
+(mismatch) 0; 161 ta avtomatik test; DeepSeek Flash: 8/8 tasdiqlandi, jami $0.028; Claude Sonnet: 5/5, ≈ $0.03 / funksiya (11-bo'lim).
 
 **★ F2. Nimalarni qilolmadingiz?**
 Real IDA/Ghidra va real obfuskatorlar bilan sinash; virtualizatsiya; matematik isbot (SMT); zararli kodni rad etish (refusal) haqiqiy modelda;
@@ -1058,7 +1062,7 @@ xavf: tekshiruv ko'rmaydigan holatlar (12-bo'lim).
    **«Tasdiqlandi»**; xulosa «FNV-1a xesh hisoblaydi»; **«Oddiy tilda»** tugmasi.
 3. **LLM (1 daqiqa).** Model **DeepSeek** → bitta funksiya → mazmunli nom va izoh. Sahifada «Server kaliti ulangan» yozuvi bor.
 4. **Tekshiruv nima ekanini ayting (1 daqiqa).** «Kodni gcc bilan kompilyatsiya qilib, asl kod bilan 2000 marta solishtiramiz. Isbot emas, kuchli dalil».
-5. **Raqamlar (30 s).** 8/8, murakkablik 58 → 21, 156 test, DeepSeek bilan 8 namuna jami $0.028.
+5. **Raqamlar (30 s).** 8/8, murakkablik 58 → 21, 161 test, DeepSeek bilan 8 namuna jami $0.028.
 6. **Halollik (1 daqiqa).** «Kodni mustaqil tekshiruvchilar bilan sindirdik, 18 ta jiddiy xato topildi (ba'zilari «tasdiqlandi»mizni yolg'on qilib qo'yardi) va
    hammasi tuzatildi».
 
@@ -1096,7 +1100,7 @@ xavf: tekshiruv ko'rmaydigan holatlar (12-bo'lim).
 5. Eng muhim qadam **tekshiruv**: gcc + differensial test (2000 kirish). LLM javobiga ko'r-ko'rona ishonmaymiz.
 6. **Agent** = sikl: so'rov → tekshiruv → xatoni qaytarish (≤ 3) → zaxira.
 7. «**Tasdiqlandi**» ≠ «isbotlandi»: test kuchli dalil, isbot emas (SMT bu kelajak ish).
-8. Natijalar: **8/8**, murakkablik **58 → 21**, mismatch **0**, **156** test.
+8. Natijalar: **8/8**, murakkablik **58 → 21**, mismatch **0**, **161** test.
 9. Eng katta xato: haqiqiy shartni «soxta» deb o'chirgan; mustaqil tekshiruvchilar topdi, tuzatdik, test yozdik.
 10. Yopiq sayt: **kirish kodi** + serverdagi **kalit** + **kunlik byudjet** + **alohida huquqsiz foydalanuvchi**.
 11. Kalit faqat Render'da (`DEEPSEEK_API_KEY`), hech qachon kodda, chatda yoki GitHub'da.
