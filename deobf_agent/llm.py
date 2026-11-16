@@ -233,10 +233,38 @@ def _deepseek_error_text(exc: DeepSeekError, model_id: str, key: str = "") -> st
     return f"DeepSeek API xatosi ({exc.status}): {exc.message}"
 
 
+def key_provider(key: str) -> str | None:
+    """Kalitning o'zidan provayderni aniqlaydi: Claude kaliti 'sk-ant-' bilan boshlanadi, DeepSeek kaliti — boshqa 'sk-...'."""
+    if key.startswith("sk-ant-"):
+        return "anthropic"
+    return "deepseek" if key.startswith("sk-") else None
+
+
+def _env_keys() -> dict[str, str]:
+    """Muhitdagi kalitlar (provayder -> kalit). Nusxalashda qo'shilib qoladigan bo'shliq, yangi qator va tirnoqlar olib
+    tashlanadi. Kalit NOTO'G'RI nomli o'zgaruvchiga yozilgan bo'lsa (masalan, DeepSeek kaliti ANTHROPIC_API_KEY ichida),
+    u shakliga qarab to'g'ri provayderga o'tkaziladi: foydalanuvchi nom adashgani uchun ishsiz qolmasin."""
+    raw = {p: os.environ.get(KEY_ENV[p], "").strip().strip("'\"").strip() for p in PROVIDERS}
+    keys = dict(raw)
+    for p, key in raw.items():
+        right = key_provider(key) if key else None
+        if right and right != p and not raw[right]:
+            keys[right], keys[p] = key, ""
+    return keys
+
+
+def key_mixups() -> list[tuple[str, str]]:
+    """[(o'zgaruvchi nomi, bo'lishi kerak bo'lgan nom)]: kalit noto'g'ri nomli o'zgaruvchida turgan holatlar (sahifada ogohlantirish uchun)."""
+    keys = _env_keys()
+    return [(KEY_ENV[p], KEY_ENV[q]) for p in PROVIDERS for q in PROVIDERS
+            if p != q and os.environ.get(KEY_ENV[p], "").strip() and not keys[p] and keys[q]
+            and not os.environ.get(KEY_ENV[q], "").strip()]
+
+
 def server_api_key(provider: str = "anthropic") -> str:
-    """Muhit o'zgaruvchisidagi (Render, .env) kalit: ANTHROPIC_API_KEY yoki DEEPSEEK_API_KEY. Nusxalashda qo'shilib
-    qoladigan bo'shliq, yangi qator va tirnoqlar olib tashlanadi: aks holda to'g'ri kalit ham «yaroqsiz» bo'lib chiqadi."""
-    return os.environ.get(KEY_ENV[provider], "").strip().strip("'\"").strip()
+    """Muhit o'zgaruvchisidagi (Render, .env) kalit: ANTHROPIC_API_KEY yoki DEEPSEEK_API_KEY (noto'g'ri nomda turgan kalit ham
+    shakliga qarab topiladi: `_env_keys`)."""
+    return _env_keys()[provider]
 
 
 def any_server_key() -> bool:

@@ -252,3 +252,23 @@ def test_dotenv_file_provides_the_deepseek_key_and_makes_it_the_default(tmp_path
 def test_masked_key_hides_the_random_part_of_a_deepseek_key():
     assert llm.mask_key(KEY) == "sk-a1...c3d4" and KEY[5:-4] not in llm.mask_key(KEY)
     assert llm.mask_key("sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUV1234") == "sk-ant-api03...1234"       # Claude: avvalgidek
+
+
+def test_a_key_stored_under_the_wrong_variable_name_is_still_found_by_its_shape(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", KEY)                         # DeepSeek kaliti Claude nomi ostida
+    assert llm.server_api_key("deepseek") == KEY and llm.server_api_key("anthropic") == ""
+    assert llm.key_mixups() == [("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY")]
+    assert llm.resolve_model(None) == "deepseek-flash"
+    assert isinstance(llm.make_client(None, "deepseek"), DeepSeekClient)
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUV1234")   # Claude kaliti DeepSeek nomi ostida
+    assert llm.server_api_key("anthropic").startswith("sk-ant-") and llm.server_api_key("deepseek") == ""
+    assert llm.key_mixups() == [("DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY")]
+
+
+def test_correctly_named_keys_are_never_moved(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", KEY)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUV1234")
+    assert llm.server_api_key("deepseek") == KEY and llm.server_api_key("anthropic").startswith("sk-ant-") and llm.key_mixups() == []
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "not-a-real-key")                           # tanib bo'lmaydigan qiymat: tegilmaydi
+    assert llm.server_api_key("anthropic") == "not-a-real-key"

@@ -35,14 +35,14 @@ from .. import llm, report, sandbox
 from ..agent import AgentConfig, deobfuscate_text
 
 ROOT = Path(__file__).resolve().parents[2]
-ENGINES = [
-    ("deepseek", "DeepSeek Flash (tavsiya) — arzon va tez, o'rtacha $0.003 / funksiya"),
-    ("deepseek-pro", "DeepSeek V4 Pro — kuchliroq, taxminan $0.014 / funksiya"),
-    ("sonnet", "Claude Sonnet 5.5 — taxminan $0.03 / funksiya"),
-    ("haiku", "Claude Haiku 5.5 — arzonroq, taxminan $0.002–0.005"),
-    ("opus", "Claude Opus 5.5 — eng kuchli, taxminan $0.06–0.15"),
-    ("offline", "Offline — bepul, LLM'siz"),
-    ("custom", "Boshqa model (nomini o'zingiz yozasiz)"),
+ENGINES = [          # (qiymat, nom, guruh): ro'yxatda guruhlar (optgroup) bo'lib ko'rinadi
+    ("deepseek", "DeepSeek Flash (tavsiya) — arzon va tez, o'rtacha $0.003 / funksiya", "DeepSeek"),
+    ("deepseek-pro", "DeepSeek V4 Pro — kuchliroq, taxminan $0.014 / funksiya", "DeepSeek"),
+    ("sonnet", "Claude Sonnet 5.5 — taxminan $0.03 / funksiya", "Claude"),
+    ("haiku", "Claude Haiku 5.5 — arzonroq, taxminan $0.002–0.005", "Claude"),
+    ("opus", "Claude Opus 5.5 — eng kuchli, taxminan $0.06–0.15", "Claude"),
+    ("offline", "Offline — bepul, LLM'siz", "Bepul"),
+    ("custom", "Boshqa model (nomini o'zingiz yozasiz)", "Boshqa"),
 ]
 PROVIDER_NAMES = {"anthropic": "Claude", "deepseek": "DeepSeek"}
 # Hisobot formatlari: nomi -> (chiqaruvchi funksiya, MIME turi)
@@ -164,10 +164,27 @@ def create_app(test_config: dict | None = None) -> Flask:
         return llm.provider_of(llm.resolve_model(engine))
 
     def visible_engines():
-        """Yopiq saytda faqat serverda kaliti bor provayderlarning modellari ko'rsatiladi (qolganlari baribir ishlamaydi)."""
-        if not (gated and server_key):
-            return ENGINES
-        return [(v, t) for v, t in ENGINES if v in ("offline", "custom") or usable(provider_for(v))]
+        """[(guruh nomi, [(qiymat, nom), ...])]. Yopiq saytda faqat serverda kaliti bor provayderlarning modellari ko'rsatiladi
+        (qolganlari baribir ishlamaydi); ochiq saytda "Boshqa model" yashirin."""
+        groups: dict[str, list] = {}
+        for value, title, group in ENGINES:
+            if value == "custom" and public and not gated:
+                continue
+            if gated and server_key and value not in ("offline", "custom") and not usable(provider_for(value)):
+                continue
+            groups.setdefault(group, []).append((value, title))
+        return list(groups.items())
+
+    # Egasi uchun eslatmalar (faqat yopiq saytda: unga faqat kod bilan kiriladi)
+    key_notes: list[str] = []
+    if gated:
+        for wrong, right in llm.key_mixups():
+            owner = PROVIDER_NAMES[next(p for p, n in llm.KEY_ENV.items() if n == right)]
+            key_notes.append(f"{wrong} ichida aslida {owner} kaliti turibdi. Men uni to'g'ri provayder uchun ishlataman, "
+                             f"lekin Render → Environment da o'zgaruvchi nomini {right} ga almashtirib qo'yish yaxshi.")
+        if server_key and not usable("deepseek"):
+            key_notes.append("DeepSeek kaliti topilmadi, shuning uchun DeepSeek modellari ro'yxatda yo'q. Qo'shish: "
+                             "Render → Environment → DEEPSEEK_API_KEY (qiymati: DeepSeek kalitingiz) → Save.")
     budget = Budget(app.config["DAILY_BUDGET_USD"] if sandbox.USE_SERVER_KEY else None)
     app.secret_key = os.environ.get("DEOBF_SESSION_SECRET") or secrets.token_hex(32)
     # Render kabi proksi orqasida haqiqiy mijoz IP'si kerak: ishonchli proksilar soni DEOBF_TRUSTED_PROXIES (standart 0)
@@ -257,7 +274,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                               "effort": "medium", "lang": "uz", "custom_model": ""},
                         engines=visible_engines(), samples=samples, data=None, error=None, rid=None, public=public,
                         native=sandbox.native_allowed(), has_key=any(server_keys.values()),
-                        gated=gated, server_key=server_key, similar_vars=_similar_key_vars() if not server_key else [])
+                        gated=gated, server_key=server_key, similar_vars=_similar_key_vars() if not server_key else [],
+                        key_notes=key_notes)
         defaults.update(kw)
         return render_template("index.html", **defaults), status
 

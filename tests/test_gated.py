@@ -304,3 +304,32 @@ def test_open_site_without_keys_asks_visitors_for_their_own_deepseek_or_claude_k
     assert 'value="deepseek"' in html and 'value="sonnet"' in html and 'id="api_key"' in html      # hamma modellar, o'z kaliti bilan
     err = c.post("/analyze", data={"code": S1, "engine": "deepseek"}).get_data(as_text=True)
     assert "o'z API kalitingizni kiriting" in err and "DEEPSEEK_API_KEY" in err
+
+
+def test_models_are_grouped_and_the_owner_is_told_when_the_deepseek_key_is_missing(gated, monkeypatch):
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", True)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-SERVERKEYSERVERKEY1234567890")          # faqat eski Claude kaliti
+    c = gated().test_client()
+    login(c)
+    html = c.get("/").get_data(as_text=True)
+    assert '<optgroup label="Claude">' in html and 'optgroup label="DeepSeek"' not in html
+    assert "DeepSeek kaliti topilmadi" in html and "DEEPSEEK_API_KEY" in html                    # nima qilish kerakligi aytiladi
+    monkeypatch.setenv("DEEPSEEK_API_KEY", DKEY)
+    app2 = gated()
+    c2 = app2.test_client()
+    login(c2)
+    page = c2.get("/").get_data(as_text=True)
+    assert page.index('optgroup label="DeepSeek"') < page.index('optgroup label="Claude"') and "DeepSeek kaliti topilmadi" not in page
+
+
+def test_a_deepseek_key_in_the_claude_variable_works_and_the_page_says_how_to_fix_the_name(gated, monkeypatch):
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", True)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", DKEY)                                                # adashib shu nomga yozilgan
+    fake = FakeDeepSeek([deepseek_reply(GOOD)])
+    c = gated(CLIENT=fake).test_client()
+    login(c)
+    html = c.get("/").get_data(as_text=True)
+    assert 'value="deepseek" selected' in html and 'value="sonnet"' not in html and DKEY not in html
+    assert "ANTHROPIC_API_KEY ichida aslida DeepSeek kaliti turibdi" in html and "DEEPSEEK_API_KEY" in html
+    ok = c.post("/analyze", data={"code": S1, "engine": "deepseek"}).get_data(as_text=True)
+    assert "deepseek-flash" in ok and len(fake.payloads) == 1                                    # ishladi

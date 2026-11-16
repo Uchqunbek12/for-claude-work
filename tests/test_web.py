@@ -135,3 +135,18 @@ def test_report_html_is_self_contained_and_report_js_is_not_escaped():
     html = report.to_html(parsed, reps)
     assert "cdnjs" not in html and "http://" not in html.replace("http://www.w3.org", "")   # internetsiz ochiladi
     assert 'aria-pressed' in html and "classList.toggle(&" not in html                       # skript buzilmagan
+
+
+def test_light_theme_is_the_default_and_dark_is_a_button_not_the_system_setting():
+    import pathlib
+
+    from deobf_agent.web.app import create_app
+
+    c = create_app().test_client()
+    html = c.get("/").get_data(as_text=True)
+    assert "theme.js" in html and "prefers-color-scheme" not in html           # tizim qorong'i rejimi saytni qoraytirmaydi
+    assert 'root[data-theme="dark"]' in html and "color-scheme: light" in html
+    js = c.get("/static/theme.js")
+    assert js.status_code == 200 and "Qorong'i fon" in js.get_data(as_text=True)
+    assert "<script>" not in html.split("</head>")[0]                          # CSP: inline skript yo'q
+    assert pathlib.Path("deobf_agent/web/static/theme.js").exists()

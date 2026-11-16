@@ -4,13 +4,17 @@
   --accent: #1d5fa7; --ink: #ffffff; --ok: #1d7038; --warn: #8a5300; --bad: #b0281f; --lit: #8a4300;
   --sans: -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161615; --text: #e7e6e1; --muted: #a3a29b; --rule: #36352f; --code: #1f1f1d;
-    --accent: #86b4ee; --ink: #111111; --ok: #74c48e; --warn: #e2b35a; --bad: #f2897e; --lit: #e2a868;
-  }
+/* Standart — OQ fon (kompyuterning qorong'i rejimidan qat'i nazar). Qorong'i fon — sahifadagi tugma bilan (static/theme.js). */
+:root[data-theme="dark"] {
+  --bg: #161615; --text: #e7e6e1; --muted: #a3a29b; --rule: #36352f; --code: #1f1f1d;
+  --accent: #86b4ee; --ink: #111111; --ok: #74c48e; --warn: #e2b35a; --bad: #f2897e; --lit: #e2a868;
+  color-scheme: dark;
 }
+.hdr-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.hdr-tools form { margin: 0; }
+.hdr-tools button { min-height: 32px; padding: 2px 10px; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
