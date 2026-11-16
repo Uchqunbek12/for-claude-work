@@ -910,3 +910,27 @@ deobfuskatsiya/dekompilyatsiya farqi), 0 dan hikoya, atamalar lug'ati, haqiqiy m
 (haqiqiy funksiya nomlari; hujjatdagi har bir `modul.funksiya` havolasi koddan avtomatik tekshirildi: 104 tasi topildi), Claude va tekshiruv qismlari,
 xavfsizlik va Render (to'rt muammo va yechim), xronologiya, natijalar, cheklovlar, **ustoz uchun 50 dan ortiq savol-javob**, namoyish rejasi va nosozliklar jadvali.
 `docs/06` eskirgan joylari haqida eslatma qo'shildi. `Dockerfile` izohi yangi (avtomatik yoqish) holatga moslandi.
+
+## 12-bosqich. DeepSeek provayderi (Claude kaliti almashtirilgandan keyin)
+
+Foydalanuvchi: Claude kaliti almashtirildi, endi DeepSeek API'ni qo'yamiz, loyihani shunga moslashtir.
+
+* **Avval hujjat o'qildi, xotiradan yozilmadi.** DeepSeek'ning rasmiy hujjati (api-docs.deepseek.com) hozirgi modellar `deepseek-flash` va `deepseek-v4-pro` ekanini ko'rsatdi
+  (xotiramdagi `deepseek-chat`/`deepseek-reasoner` nomlari eskirgan bo'lishi mumkin edi); JSON rejimi (`response_format: json_object`, prompt'da «json» so'zi va namuna kerak),
+  o'ylash rejimi standart yoqilgan, `usage` da `prompt_cache_hit_tokens`, band/bo'sh soat narxlari. Keyin haqiqiy API (`/models`) buni tasdiqladi.
+* **Dizayn: ikkinchi provayder, Claude o'rnini bosish emas.** `llm.provider_of` model nomidan provayderni topadi; `LLMSession` (eski nomi `ClaudeSession` saqlandi) ichida
+  `_call_api` (Claude) yoki `_call_deepseek`. Agent, tekshiruv, hisobot o'zgarmadi. Standart model: DeepSeek kaliti bo'lsa `deepseek`, aks holda `sonnet`.
+* **`deepseek.py`:** mijoz faqat standart kutubxonada (`urllib`): yangi paket va Dockerfile o'zgarishi kerak emas (muhitda `anthropic` 2.x `httpx` emas `httpx2` ishlatishi ham ma'lum bo'ldi,
+  shuning uchun `httpx`ga tayanmadik). Kalit faqat `Authorization` sarlavhasida; xato matnlari tuzildi (401/402/429/5xx/vaqt/ulanish).
+* **JSON rejimi sxemani majburlamaydi** (Claude majburlaydi): sxema va namuna prompt'ga yoziladi, javob pydantic bilan tekshiriladi, bo'sh/noto'g'ri javobda bir marta qayta so'raladi.
+* **Veb:** yopiq saytda faqat serverda kaliti bor provayderlarning modellari ko'rsatiladi; kalit maydoni yo'q; kalit holati har provayder uchun tekshiriladi (`/api/server-status`);
+  kalit bor-u kirish kodi yo'q bo'lsa sayt to'xtaydi (DeepSeek uchun ham). `2_kalit_kiritish.bat` ikkala kalitni so'raydi; `deobf check` ikkala kalitni ko'rsatadi.
+* **Haqiqiy API sinovi** (kalit chatga yozilmadi: xavfsiz shakl orqali, tarmoq proksisi `api.deepseek.com` so'rovlariga qo'shib berdi): 8 namuna **8/8 tasdiqlandi**, jami **$0.028**
+  (`docs/baholash_deepseek.md`). Butun veb zanjiri ham (kirish kodi → kalit holati → tahlil → «Tasdiqlandi») haqiqiy DeepSeek bilan, Render'dagi sozlamada ishladi.
+* **Kutilmagan topilma → yaxshilash.** `s2_opaque` da Flash o'ylashsiz rejimda 3 marta bir xil xato qildi (psevdokoddagi juft/toq tekshiruvini «odatdagi clamp» deb tashlab yubordi);
+  tekshiruv buni ushladi va offline zaxira olindi. O'lchov: o'ylash yoqilsa to'g'ri chiqadi, lekin Pro + doim o'ylash 132 s va $0.058. **Qaror:** o'rta chuqurlikda birinchi urinish
+  o'ylashsiz (tez, arzon), tekshiruv xato topib tuzatish so'ralganda o'ylash avtomatik yoqiladi. Qayta o'lchov: `s2_opaque` ikki marta ham 2-urinishda tasdiqlandi ($0.008, 29 s).
+* **Kutish chegarasi** 90 s (veb-sayt vaqt byudjetiga sig'ishi uchun; `DEOBF_LLM_TIMEOUT` bilan o'zgaradi).
+* **Testlar:** 123 → **156**. Yangilari: so'rov shakli, narx hisobi, bo'sh/noto'g'ri JSON, xatolar kalitni oshkor qilmasligi, **mahalliy HTTP server bilan haqiqiy urllib so'rovi** (sarlavha, qayta urinish),
+  agent sikli (DeepSeek xatosi → tuzatish → tasdiqlash; 402 → offline zaxira), veb (modellar filtri, server kaliti, holat), CLI. `conftest.py` haqiqiy kalitlarni testlardan yashiradi.
+* **Ochiq qolganlar:** zararli kodni rad etish (refusal) haqiqiy DeepSeek'da ko'rilmagan; tanlama kichik; DeepSeek ma'lumotlarni qayerda saqlashi haqida rasmiy siyosatni foydalanuvchi o'zi o'qishi kerak.

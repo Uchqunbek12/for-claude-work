@@ -1,11 +1,11 @@
 # deobf-agent — obfuskatsiyalangan kodni deobfuskatsiya qilish agenti
 
-IDA (Hex-Rays), Ghidra yoki angr orqali olingan **obfuskatsiyalangan psevdokodni** LLM (Claude)
+IDA (Hex-Rays), Ghidra yoki angr orqali olingan **obfuskatsiyalangan psevdokodni** LLM (DeepSeek yoki Claude)
 yordamida soddalashtiradigan, **C tilidagi ekvivalentini** yaratadigan va **har bir blokni o'zbek
 tilida tushuntiradigan** vosita. Natija kompilyator va minglab avtomatik test bilan tekshiriladi.
 
 ```
-psevdokod → parser → statik tahlil (bepul) → Claude → tekshiruv (gcc + differensial test) → hisobot
+psevdokod → parser → statik tahlil (bepul) → LLM (DeepSeek / Claude) → tekshiruv (gcc + differensial test) → hisobot
                                                ↑                 │
                                                └── xato bo'lsa ──┘  (o'z-o'zini tuzatish, maks. 3 marta)
 ```
@@ -17,8 +17,9 @@ psevdokod → parser → statik tahlil (bepul) → Claude → tekshiruv (gcc + d
   Topilmalar tasodifiy test bilan **isbotlanadi**.
 - **Avtomatik soddalashtirish:** MBA → oddiy ifoda, soxta shartlar va o'lik tarmoqlarni kesish,
   **flattening'ni yechish** (`while(1){switch}` → `while`/`if`).
-- **LLM (Claude):** toza C kod, bloklar bo'yicha tushuntirish, mazmunli nomlar. Standart model —
-  **Sonnet 5.5** (kuchli, o'rtacha narxda); `--model haiku` (arzonroq) / `opus` (kuchliroq) bilan bir zumda almashtiriladi.
+- **LLM (DeepSeek yoki Claude):** toza C kod, bloklar bo'yicha tushuntirish, mazmunli nomlar. Standart model — **DeepSeek Flash**
+  (`DEEPSEEK_API_KEY` bo'lsa; haqiqiy API'da 8 namunada 8/8 tasdiqlandi, funksiyasiga ≈ $0.0035); kuchliroq: `--model deepseek-pro`.
+  Claude (`ANTHROPIC_API_KEY`): `--model sonnet` / `haiku` / `opus` — bir zumda almashtiriladi.
 - **Murakkab kod:** ko'rsatkich/bufer parametrlari, bir nechta funksiyali kirish (yordamchi funksiyalar
   avval tahlil qilinadi), aniqlanmagan tashqi funksiyalar, global o'zgaruvchilar ham qo'llab-quvvatlanadi.
 - **Tekshiruv:** gcc kompilyatsiyasi + asl psevdokod bilan **differensial test** (2000 tasodifiy kirish).
@@ -46,12 +47,13 @@ pip install -e ".[dev]"
 
 deobf check                                                     # diagnostika: kalit ishlayaptimi?
 deobf analyze samples/decompiled/s3_flatten.angr.c --offline   # bepul
-deobf analyze samples/decompiled/s3_flatten.angr.c              # Claude Sonnet 5.5 (standart)
-deobf analyze samples/decompiled/s3_flatten.angr.c --model haiku
+deobf analyze samples/decompiled/s3_flatten.angr.c              # standart: DeepSeek Flash (kalit bo'lsa), aks holda Claude Sonnet
+deobf analyze samples/decompiled/s3_flatten.angr.c --model deepseek-pro
+deobf analyze samples/decompiled/s3_flatten.angr.c --model sonnet   # Claude
 deobf web                                                       # http://127.0.0.1:5000
 deobf web --public                                              # internetga chiqariladigan demo rejimi
 ```
-API kalit loyiha papkasidagi `.env` fayliga yoziladi: `ANTHROPIC_API_KEY=sk-ant-...`.
+API kalit loyiha papkasidagi `.env` fayliga yoziladi: `DEEPSEEK_API_KEY=sk-...` (DeepSeek) yoki `ANTHROPIC_API_KEY=sk-ant-...` (Claude).
 Batafsil: **[docs/02_foydalanish.md](docs/02_foydalanish.md)**.
 
 ## Natijalar (offline rejim, 8 ta namuna)
@@ -76,9 +78,10 @@ deobf_agent/
   explain.py     tushuntirish matnlari: mutaxassis nomlari + "dehqoncha" o'xshatishlar
   narrate.py     tozalangan koddan aniq o'zbekcha jumlalar yasash, funksiya ma'nosini aniqlash (LLM'siz)
   blocks.py      offline bloklar: kod qadamlari + olib tashlangan narsalar
-  prompts.py     Claude uchun ko'rsatmalar
+  prompts.py     LLM uchun ko'rsatmalar
   schema.py      javob sxemasi (structured output)
-  llm.py         Claude API: modellar, narx, kesh, xatolar
+  llm.py         LLM (DeepSeek/Claude): modellar, narx, kesh, xatolar
+  deepseek.py    DeepSeek API mijozi (standart kutubxona)
   verifier.py    kompilyatsiya + differensial test
   harness.py     differensial test generatori
   compiler.py    gcc bilan ishlash (IDA/Ghidra idiomlarini moslashtirish)

@@ -1,7 +1,7 @@
 # Internetga chiqarish uchun konteyner.
 #
 # Standart (xavfsiz) holat: DEOBF_PUBLIC=1 — hammaga ochiq sayt: kod ishga tushirilmaydi, kalit serverda yo'q.
-# Yopiq sayt (render.yaml shu holatni sozlaydi): DEOBF_ACCESS_CODE (kirish kodi) va ANTHROPIC_API_KEY berilsa, server kaliti va
+# Yopiq sayt (render.yaml shu holatni sozlaydi): DEOBF_ACCESS_CODE (kirish kodi) va DEEPSEEK_API_KEY (yoki ANTHROPIC_API_KEY) berilsa, server kaliti va
 # to'liq tekshiruv AVTOMATIK yoqiladi: tekshirilayotgan kod (gcc + differensial test) quyidagi huquqsiz "sandbox" foydalanuvchisi
 # nomidan ishlaydi; server esa root bo'lib qoladi: sandbox foydalanuvchisi serverning muhit o'zgaruvchilarini (API kalit) va
 # xotirasini o'qiy olmaydi. Docker qurish vaqtida hech qanday maxfiy qiymat yo'q.

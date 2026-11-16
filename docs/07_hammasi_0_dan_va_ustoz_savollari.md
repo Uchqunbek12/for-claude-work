@@ -4,7 +4,8 @@
 > tushunchalaridan boshlanadi, har bir atama va har bir muhim ibora alohida izohlanadi, oxirida ustoz berishi mumkin bo'lgan
 > savollar va javoblar bor.
 >
-> **Holat (2026-11-04):** loyiha tayyor, Render'ga joylangan, kirish kodi bilan ochiladigan sayt ishlayapti, 123 ta avtomatik test o'tadi.
+> **Holat (2026-11-16):** loyiha tayyor, Render'ga joylangan, kirish kodi bilan ochiladigan sayt ishlayapti, 156 ta avtomatik test o'tadi.
+> LLM ikki provayderdan biri: **DeepSeek** (standart, `DEEPSEEK_API_KEY` bo'lsa; haqiqiy API bilan sinalgan) yoki **Claude** (`ANTHROPIC_API_KEY`).
 > Bu hujjat `06_loyiha_toliq_tushuntirish.md` ning o'rnini bosadi (06 da test soni va joylash holati eskirgan; mazmuni baribir to'g'ri).
 
 ## Qanday o'qish kerak
@@ -12,7 +13,7 @@
 | Vaqtingiz | Nima o'qiysiz |
 |---|---|
 | **2 daqiqa** | 0-bo'lim («Bir gapda» va «30 soniyalik javob») |
-| **15 daqiqa** | 0, 1, 2, 4-bo'limlar + 13-bo'limdagi ★ belgili 14 ta savol |
+| **15 daqiqa** | 0, 1, 2, 4-bo'limlar + 13-bo'limdagi ★ belgili 16 ta savol |
 | **Hammasini tushunish** | boshidan oxirigacha; 6-bo'lim (funksiyalar xaritasi) ni kompyuter oldida kod bilan birga o'qing |
 
 ## Mundarija
@@ -24,7 +25,7 @@
 4. Loyiha bir qarashda
 5. Bitta funksiya yo'li: haqiqiy misol qadamma-qadam
 6. Funksiyalar xaritasi: qayerda qaysi funksiya nima qiladi
-7. Claude qismi: nima yuboriladi, nima qaytadi
+7. LLM qismi (DeepSeek va Claude): nima yuboriladi, nima qaytadi
 8. Tekshiruv: nega «tasdiqlandi» degan so'zga ishonsa bo'ladi (va qachon bo'lmaydi)
 9. Veb sayt, xavfsizlik va kalit
 10. Nima bo'ldi: xronologiya, xatolar, saboqlar
@@ -47,7 +48,7 @@ aylantiradigan, har bir qadamini o'zbekcha tushuntiradigan va natija asl kod bil
 > yoki Ghidra bilan ochsa, chigal psevdokod ko'radi. Biz shuni oladigan vosita yaratdik: u chalkashliklarni topib olib tashlaydi,
 > toza C kodini beradi va har bir blokni odam tilida tushuntiradi. Eng muhimi: natijaga ko'r-ko'rona ishonmaymiz, yangi kodni
 > kompilyatsiya qilib, eskisi bilan 2000 ta tasodifiy kirishda solishtiramiz. Soddalashtirishni ikki yo'l bilan qilamiz:
-> oldindan yozilgan qoidalar (bepul) yoki Claude sun'iy intellekti (pullik, ≈ $0.03 / funksiya); ikkala holatda ham tekshiruv bir xil.»
+> oldindan yozilgan qoidalar (bepul) yoki sun'iy intellekt (LLM: DeepSeek ≈ $0.003 yoki Claude ≈ $0.03 / funksiya); ikkala holatda ham tekshiruv bir xil.»
 
 ---
 
@@ -68,16 +69,16 @@ nimani qildik va qayerda to'liq emas.
 | **kodni** | dastur matnini | kirish: dekompilyator chiqargan **psevdokod** (C ga o'xshash matn), mashina kodi (`.exe`) emas | ✅, lekin «kod» = psevdokod ekanini ayting |
 | **deobfuskatsiya** | chalkashlikni olib tashlash (teskari jarayon) | topamiz → soddalashtiramiz → tekshiramiz | ✅ (aniq ma'nosi pastda) |
 | **qilish** | bajarish | avtomatik: matnni joylaysiz, natija chiqadi | ✅ |
-| **agenti** | o'zi qaror qilib, harakat qilib, natijasini tekshiradigan dastur | Claude javob beradi → tekshiruv → xato bo'lsa xatoni qaytaradi → 3 martagacha; bo'lmasa offline zaxira (1.3-bo'lim) | ✅, lekin cheklangan ma'noda |
+| **agenti** | o'zi qaror qilib, harakat qilib, natijasini tekshiradigan dastur | LLM javob beradi → tekshiruv → xato bo'lsa xatoni qaytaradi → 3 martagacha; bo'lmasa offline zaxira (1.3-bo'lim) | ✅, lekin cheklangan ma'noda |
 
 ### 1.2. Mavzu tavsifidagi uchta talab va ularning bajarilishi
 
 | Talab (mavzu matnidan) | Nima qildik | Qayerda | Holat |
 |---|---|---|---|
 | «IDA Pro yoki Ghidra orqali olingan obfuskatsiyalangan kodni» (**kirish**) | psevdokodni joylaysiz yoki fayldan yuklaysiz; uslubni (IDA / Ghidra / angr / oddiy C) o'zi aniqlaydi. Ikkita eksport skripti ham bor (`scripts/`) | `parser.py` | ✅ qisman: haqiqiy IDA/Ghidra o'rnatilmagan, shuning uchun IDA/Ghidra uslubidagi **qo'lda yozilgan** 21 ta kirish bilan va **angr** dekompilyatori chiqargan 8 ta haqiqiy namuna bilan sinadik |
-| «**LLM yordamida soddalashtiradigan**» | Claude Sonnet 5.5 (yoki Haiku/Opus) soddalashtiradi; qoidalar (offline) bilan ham ishlaydi | `prompts.py`, `llm.py`, `offline.py` | ✅ |
+| «**LLM yordamida soddalashtiradigan**» | DeepSeek (Flash/Pro) yoki Claude (Sonnet/Haiku/Opus) soddalashtiradi; qoidalar (offline) bilan ham ishlaydi | `prompts.py`, `llm.py`, `offline.py` | ✅ |
 | «**C tilidagi ekvivalentini yaratadigan**» | toza C kodi chiqadi va **ekvivalentligi tekshiriladi** (gcc + differensial test) | `verifier.py`, `harness.py` | ✅ (isbot emas, dalil: 8-bo'lim) |
-| «**har bir blokni inson tushunadigan tilda tushuntiradigan**» | har blok uchun ikki matn: mutaxassis va «dehqoncha»; funksiya xulosasi; o'zbek/rus/ingliz | `narrate.py`, `blocks.py`, `explain.py`, Claude | ✅ |
+| «**har bir blokni inson tushunadigan tilda tushuntiradigan**» | har blok uchun ikki matn: mutaxassis va «dehqoncha»; funksiya xulosasi; o'zbek/rus/ingliz | `narrate.py`, `blocks.py`, `explain.py`, LLM | ✅ |
 | «**vosita ishlab chiqish**» | buyruq qatori (`deobf`) + brauzer interfeysi + internetdagi sayt | `cli.py`, `web/app.py` | ✅ |
 
 ### 1.3. «Agent» so'zi: ustoz aynan shunga qiziqishi mumkin
@@ -86,15 +87,15 @@ nimani qildik va qayerda to'liq emas.
 Bizniki shunday *sikl*:
 
 ```
-  1. Claude'ga so'rov yuboradi (kod + statik tahlil natijalari)
+  1. LLM'ga (DeepSeek/Claude) so'rov yuboradi (kod + statik tahlil natijalari)
   2. Javobni oladi (toza C kod + bloklar)
   3. TEKSHIRADI: kompilyatsiya + 2000 test        ◄── "vosita ishlatish"
-  4. Farq bor? → farqni Claude'ga qaytaradi, 1-qadamga (ko'pi bilan 3 urinish)   ◄── "natijaga qarab harakatni o'zgartirish"
+  4. Farq bor? → farqni LLM'ga qaytaradi, 1-qadamga (ko'pi bilan 3 urinish)   ◄── "natijaga qarab harakatni o'zgartirish"
   5. Hali ham bo'lmasa → offline qoidalar natijasi bilan solishtirib, yaxshisini oladi  ◄── "zaxira reja"
 ```
 
 Bu `agent.py` dagi `deobfuscate_function` funksiyasi (6.1-bo'lim). **Halol qo'shimcha:** bu *tor, qat'iy belgilangan* agent:
-qadamlar tartibini Claude emas, **biz** belgilaganmiz; Claude faqat 1-qadamda ishtirok etadi. Bu ataylab: kuchli agent erkinroq,
+qadamlar tartibini LLM emas, **biz** belgilaganmiz; LLM faqat 1-qadamda ishtirok etadi. Bu ataylab: kuchli agent erkinroq,
 lekin kamroq ishonchli bo'lardi; bizga ishonchlilik muhim edi. Ustoz «bu haqiqiy agentmi?» desa, 13-bo'limdagi javobga qarang.
 
 ### 1.4. «Deobfuskatsiya» ≠ «dekompilyatsiya» ≠ «asl kodni tiklash»
@@ -177,16 +178,16 @@ Natijada tahlilchi bitta funksiyaga soatlab, kunlab vaqt sarflaydi.
  chigal psevdokod ─► [topish] ─► [soddalashtirish] ─► [TEKSHIRISH] ─► [tushuntirish] ─► toza C + izohlar
 ```
 
-1. **Topish:** qaysi chalkashtirish usullari bor (statik tahlil, Claude'siz, bepul).
-2. **Soddalashtirish:** qoidalar bilan (offline) yoki Claude bilan.
+1. **Topish:** qaysi chalkashtirish usullari bor (statik tahlil, LLM'siz, bepul).
+2. **Soddalashtirish:** qoidalar bilan (offline) yoki LLM bilan (DeepSeek/Claude).
 3. **Tekshirish:** yangi kod kompilyatsiya bo'ladimi, eskisi bilan bir xil ishlaydimi? Bu eng muhim qadam.
 4. **Tushuntirish:** har bir blok uchun nima qilishi, nima o'zgargani, ikki darajada (mutaxassis va «dehqoncha»).
 
-### 2.5. Nega faqat Claude'ga «soddalashtir» demaymiz?
+### 2.5. Nega faqat LLM'ga «soddalashtir» demaymiz?
 
 Chunki **LLM xato qiladi**. U chiroyli, ishonchli ko'rinadigan, lekin **boshqacha ishlaydigan** kod yozishi mumkin. Tahlilchi esa
 noto'g'ri kodga tayansa, zararli dastur haqida noto'g'ri xulosa chiqaradi. Shuning uchun bizning loyihaning yuragi LLM emas,
-**tekshiruv**: har qanday javob (Claude'niki ham, qoidalarniki ham) bir xil sinovdan o'tadi.
+**tekshiruv**: har qanday javob (LLM'niki ham, qoidalarniki ham) bir xil sinovdan o'tadi.
 
 ---
 
@@ -226,15 +227,18 @@ noto'g'ri kodga tayansa, zararli dastur haqida noto'g'ri xulosa chiqaradi. Shuni
 
 | Atama | Oddiy tilda | Bizda |
 |---|---|---|
-| **LLM (Large Language Model)** | matnni tushunadigan va yozadigan katta sun'iy intellekt modeli | Claude |
-| **Claude Sonnet 5.5 / Haiku 5.5 / Opus 5.5** | Anthropic'ning uchta modeli: o'rtacha / arzon-tez / eng kuchli | standart: **Sonnet** (`llm.DEFAULT_MODEL`) |
-| **API** | dasturlar bir-biri bilan gaplashadigan «eshik» | bizning dastur Claude'ga internet orqali shu eshik bilan murojaat qiladi |
-| **API kalit** | parol kabi uzun matn (`sk-ant-...`); u orqali kim va kimning hisobidan so'rov yuborilayotgani aniqlanadi | **faqat Render'dagi `ANTHROPIC_API_KEY` yoki `.env` faylida**; kodga yoki GitHub'ga **hech qachon** yozilmaydi |
+| **LLM (Large Language Model)** | matnni tushunadigan va yozadigan katta sun'iy intellekt modeli | DeepSeek, Claude |
+| **DeepSeek Flash / DeepSeek V4 Pro** | DeepSeek'ning ikki modeli: arzon-tez / kuchliroq (rasmiy nomlari `deepseek-flash`, `deepseek-v4-pro`) | **standart**, DeepSeek kaliti bo'lsa (`llm.default_alias`) |
+| **Claude Sonnet 5.5 / Haiku 5.5 / Opus 5.5** | Anthropic'ning uchta modeli: o'rtacha / arzon-tez / eng kuchli | DeepSeek kaliti yo'q bo'lsa standart: **Sonnet** |
+| **API** | dasturlar bir-biri bilan gaplashadigan «eshik» | bizning dastur DeepSeek yoki Claude'ga internet orqali shu eshik bilan murojaat qiladi |
+| **API kalit** | parol kabi uzun matn (DeepSeek: `sk-...`, Claude: `sk-ant-...`); u orqali kim va kimning hisobidan so'rov yuborilayotgani aniqlanadi | **faqat Render'dagi `DEEPSEEK_API_KEY` (yoki `ANTHROPIC_API_KEY`) yoki `.env` faylida**; kodga yoki GitHub'ga **hech qachon** yozilmaydi |
 | **Token** | matnning bo'lagi (taxminan 3–4 harf); LLM narxi token soniga qarab hisoblanadi | `llm.UsageStats` sarfni sanaydi |
 | **Prompt** | modelga yuboriladigan ko'rsatma va ma'lumot | `prompts.py` |
 | **Tuzilmali chiqish (structured output)** | model javobni erkin matn emas, **aniq belgilangan shakldagi JSON** qilib beradi | `schema.DeobfResult`; shunda javobni qo'lda «ajratib olish» kerak emas, xato kamayadi |
 | **Effort (chuqurlik)** | modelning qanchalik «o'ylashi» (past / o'rta / yuqori) | UI'da «Chuqurlik» |
 | **Prompt kesh** | bir xil so'rovning takrorlanadigan qismi arzon hisoblanadi | `cache_control` + `llm.DiskCache` (xuddi shu javob ikkinchi marta $0) |
+| **JSON rejimi (DeepSeek)** | DeepSeek sxemani majburlay olmaydi: u faqat «JSON qaytar» rejimini beradi. Sxemani prompt ichiga yozamiz, javobni pydantic bilan **o'zimiz tekshiramiz** (noto'g'ri bo'lsa bir marta qayta so'raymiz) | `llm.LLMSession._call_deepseek` |
+| **O'ylash (thinking) rejimi** | model javobdan oldin «ichida o'ylaydi»: aniqroq, lekin sekinroq va qimmatroq | `effort`; o'rta rejimda tekshiruv xato topgandagina yoqiladi (7.2) |
 | **BYOK (bring your own key)** | foydalanuvchi o'z kalitini o'zi kiritadi | ochiq saytda; yopiq saytda esa sizning kalitingiz serverda |
 
 ### 3.4. Tekshirish
@@ -245,7 +249,7 @@ noto'g'ri kodga tayansa, zararli dastur haqida noto'g'ri xulosa chiqaradi. Shuni
 | **Differensial test** | ikkala kodni bir xil tasodifiy kirishlar bilan ishga tushirib, natijalarni solishtirish | `harness.differential_test` |
 | **Tasdiqlandi (verified)** | kompilyatsiya bo'ldi + barcha testlar mos keldi | `verifier.STATUS_UZ["verified"]` |
 | **Isbot** | matematik jihatdan 100% ishonch | **bizda isbot yo'q**, faqat kuchli dalil (nega: 8.4) |
-| **Mismatch** | testda farq topildi: yangi kod noto'g'ri | Claude'ga qaytariladi |
+| **Mismatch** | testda farq topildi: yangi kod noto'g'ri | LLM'ga qaytariladi |
 | **Statik tahlil** | kodni **ishga tushirmasdan** matnini o'qib tahlil qilish | `detectors.py` |
 | **Dinamik tahlil** | kodni **ishga tushirib** kuzatish | bizning differensial test shunday |
 | **Tsiklomatik murakkablik** | koddagi «yo'l ayrilishlari» soni (`if`, `while`, `case` + 1); katta bo'lsa tushunish qiyin | `metrics.py`; natijani baholashda ishlatamiz (58 → 21) |
@@ -258,7 +262,7 @@ noto'g'ri kodga tayansa, zararli dastur haqida noto'g'ri xulosa chiqaradi. Shuni
 | **Flask** | Python'da veb sayt yasash kutubxonasi | `web/app.py` |
 | **Sandbox («qum qutisi»)** | begona kodni xavfsiz «qutida» ishga tushirish: boshqa narsalarga tegolmaydi | `sandbox.py` |
 | **Kirish kodi** | saytga kirish uchun parol | Render'dagi `DEOBF_ACCESS_CODE` |
-| **Budjet chegarasi** | kunlik sarf ($2) tugasa Claude to'xtaydi | `web.app.Budget` |
+| **Budjet chegarasi** | kunlik sarf ($2) tugasa LLM to'xtaydi | `web.app.Budget` |
 | **CSRF** | boshqa sayt sizning nomingizdan so'rov yuborishi hujumi | `before_request` ichida Origin / Sec-Fetch-Site tekshiruvi |
 | **CSP** | brauzerga «faqat o'z skriptlarimni ishlat» deyuvchi sarlavha | `after_request` |
 | **Rate limit** | bir IP'dan so'rovlar sonini cheklash | `web.app.RateLimiter` |
@@ -283,13 +287,13 @@ noto'g'ri kodga tayansa, zararli dastur haqida noto'g'ri xulosa chiqaradi. Shuni
  └────────────┬─────────────┘
               ▼
  ┌──────────────────────────┐
- │ detectors.py  (+ expr.py)│   STATIK TAHLIL: qaysi chalkashtirish bor? (Claude'siz, bepul)
+ │ detectors.py  (+ expr.py)│   STATIK TAHLIL: qaysi chalkashtirish bor? (LLM'siz, bepul)
  └────────────┬─────────────┘
               ▼
       ┌───────┴───────────┐
       ▼                   ▼
  OFFLINE (qoidalar)     CLAUDE
- offline.py             prompts.py → llm.py → Claude API
+ offline.py             prompts.py → llm.py → DeepSeek / Claude API
  unflatten.py           (xabar tuzadi)  (javob: tuzilmali JSON)
       └───────┬───────────┘
               ▼
@@ -297,7 +301,7 @@ noto'g'ri kodga tayansa, zararli dastur haqida noto'g'ri xulosa chiqaradi. Shuni
  │ verifier.py + harness.py + compiler  │   1) gcc kompilyatsiya qiladimi?  2) asl bilan 2000 testda bir xilmi?
  │ + sandbox.py (xavfsiz ishga tushirish)│
  └────────────┬─────────────────────────┘
-              │  farq bor → xatoni Claude'ga qaytaradi (≤ 3 urinish) → bo'lmasa offline zaxira
+              │  farq bor → xatoni LLM'ga qaytaradi (≤ 3 urinish) → bo'lmasa offline zaxira
               ▼
  ┌──────────────────────────────────────┐
  │ narrate.py + blocks.py + explain.py  │   har blok uchun tushuntirish: mutaxassis + «dehqoncha»
@@ -306,15 +310,15 @@ noto'g'ri kodga tayansa, zararli dastur haqida noto'g'ri xulosa chiqaradi. Shuni
         report.py  →  Markdown / JSON / HTML
 ```
 
-**Nega aynan shu tartib?** Eng arzon va ishonchli qadamlar (parser, statik tahlil) **avval**; qimmat va ishonchsiz qadam (Claude)
-**keyin**; eng muhim qadam (tekshiruv) **oxirida**, chunki Claude xato qilishi mumkin.
+**Nega aynan shu tartib?** Eng arzon va ishonchli qadamlar (parser, statik tahlil) **avval**; qimmat va ishonchsiz qadam (LLM)
+**keyin**; eng muhim qadam (tekshiruv) **oxirida**, chunki LLM xato qilishi mumkin.
 
 ### 4.2. Uch ishlash usuli
 
-| | **Offline** | **Claude** | **Yopiq veb sayt** |
+| | **Offline** | **LLM (DeepSeek yoki Claude)** | **Yopiq veb sayt** |
 |---|---|---|---|
-| Kim soddalashtiradi | oldindan yozilgan qoidalar | Sonnet/Haiku/Opus | ikkalasi ham tanlanadi |
-| Narx | bepul | ≈ $0.03 / funksiya (Sonnet) | sizning kalitingizdan; kuniga ≤ $2 |
+| Kim soddalashtiradi | oldindan yozilgan qoidalar | DeepSeek Flash/Pro yoki Claude Sonnet/Haiku/Opus | ikkalasi ham tanlanadi |
+| Narx | bepul | DeepSeek Flash ≈ $0.003, Claude Sonnet ≈ $0.03 / funksiya | sizning kalitingizdan; kuniga ≤ $2 |
 | Kalit kerakmi | yo'q | ha (`.env`) | server kaliti ulangan, siz kiritmaysiz |
 | Qayerda ishlaydi | kompyuteringizda | kompyuteringizda | internetda (Render), kod bilan kiriladi |
 | Tekshiruv | to'liq | to'liq | to'liq (alohida huquqsiz foydalanuvchi nomidan) |
@@ -326,7 +330,7 @@ deobf_agent/        ← asosiy dastur (Python paketi)
   web/              ← veb sayt (app.py, templates/, static/)
   data/re_types.h   ← IDA/Ghidra turlari (_DWORD, undefined8...) uchun C sarlavhasi
 samples/            ← 8 ta test namunasi: src/clean (toza), bin (kompilyatsiya), decompiled (angr psevdokodi)
-tests/              ← 123 ta avtomatik test
+tests/              ← 156 ta avtomatik test
 docs/               ← hujjatlar (shu fayl ham)
 scripts/            ← IDA va Ghidra eksport skriptlari, namunalarni yaratish
 Dockerfile, render.yaml   ← internetga chiqarish
@@ -401,7 +405,7 @@ va shartni qayta tikladi. Natija 12 qator:
 ```
 
 Murakkablik 7 → 2. `narrate.meaning` funksiya ma'nosini aniqladi: *«Evklid algoritmi bilan ikki sonning eng katta umumiy
-bo'luvchisini (EKUB) topadi»*. Bu qoidalar bilan, Claude'siz.
+bo'luvchisini (EKUB) topadi»*. Bu qoidalar bilan, LLM'siz.
 
 ---
 
@@ -414,8 +418,8 @@ Quyidagilar **haqiqiy funksiya nomlari**. Ustoz «bu qismni qaysi funksiya qilad
 
 | Funksiya | Vazifasi |
 |---|---|
-| `deobfuscate_text(text, cfg, function=None)` | **Kirish nuqtasi.** Matnni `parser.parse` bilan ochadi, funksiyalarni «avval chaqiriladigani» tartibida (`_callee_first`) bittadan `deobfuscate_function` ga beradi. Yordamchi funksiya haqidagi qisqa eslatma chaqiruvchi funksiya uchun Claude'ga beriladi (odam ham kodni shunday o'qiydi) |
-| `deobfuscate_function(parsed, func, cfg, ...)` | **Agent sikli.** Statik tahlil → (Claude bo'lsa) so'rov → tekshiruv → xato bo'lsa tuzatish so'rovi (`cfg.max_rounds` = 3) → tasdiqlanmasa offline bilan solishtirib yaxshisini tanlash |
+| `deobfuscate_text(text, cfg, function=None)` | **Kirish nuqtasi.** Matnni `parser.parse` bilan ochadi, funksiyalarni «avval chaqiriladigani» tartibida (`_callee_first`) bittadan `deobfuscate_function` ga beradi. Yordamchi funksiya haqidagi qisqa eslatma chaqiruvchi funksiya uchun LLM'ga beriladi (odam ham kodni shunday o'qiydi) |
+| `deobfuscate_function(parsed, func, cfg, ...)` | **Agent sikli.** Statik tahlil → (LLM tanlangan bo'lsa) so'rov → tekshiruv → xato bo'lsa tuzatish so'rovi (`cfg.max_rounds` = 3) → tasdiqlanmasa offline bilan solishtirib yaxshisini tanlash |
 | `_run_offline(...)` | Offline natijani 4 darajada sinaydi: **2** (hammasi), **1** (tekislashsiz), **0** (faqat ifodalar), **−1** (hech narsa o'zgartirilmaydi, oxirgi himoya). Birinchi tasdiqlangan darajani oladi |
 | `_better(a, b)` | Ikki tekshiruv natijasidan yaxshisini tanlaydi: avval holat darajasi (`verified > compiled > no_compiler > mismatch > compile_error`), teng bo'lsa kam farqli |
 | `AgentConfig` | sozlamalar: model, offline, effort, til, urinishlar soni, testlar soni, kalit... |
@@ -464,22 +468,24 @@ C ifodalarini **o'zimiz** hisoblaymiz (Python'ning `eval` ini ishlatmaymiz: u xa
 
 | Funksiya | Vazifasi |
 |---|---|
-| `offline.run_offline(func, analysis, preamble, level)` | **Offline asosiy funksiya.** Darajaga qarab: tekislashni yechadi → ifodalarni soddalashtiradi → soxta tarmoqlarni kesadi → o'lik kodni olib tashlaydi → bloklar va xulosa yig'adi (`DeobfResult` qaytaradi, Claude javobi bilan **bir xil shaklda**) |
+| `offline.run_offline(func, analysis, preamble, level)` | **Offline asosiy funksiya.** Darajaga qarab: tekislashni yechadi → ifodalarni soddalashtiradi → soxta tarmoqlarni kesadi → o'lik kodni olib tashlaydi → bloklar va xulosa yig'adi (`DeobfResult` qaytaradi, LLM javobi bilan **bir xil shaklda**) |
 | `offline.simplify_code` | MBA ifodalarni qisqa ekvivalenti bilan almashtiradi (`(qator, eski, yangi)` ro'yxati) |
 | `offline.prune_constant_branches` | doim bir xil shartli `if` larni olib tashlaydi |
 | `offline.remove_dead_variables`, `remove_dead_stores` | keraksiz o'zgaruvchi va yozuvlarni olib tashlaydi |
 | `unflatten.unflatten(func_text)` | tekislangan kodni tsikl va shartlarga qaytaradi. Yecha olmasa `None` qaytaradi (kod tegmasdan qoladi, buzmaydi) |
 
-### 6.6. Claude bilan ishlash: `prompts.py`, `schema.py`, `llm.py`
+### 6.6. LLM bilan ishlash: `prompts.py`, `schema.py`, `llm.py`, `deepseek.py`
 
 | Funksiya / sinf | Vazifasi |
 |---|---|
-| `prompts.SYSTEM_PROMPT` | Claude'ga **doimiy ko'rsatma**: rolingiz, qoidalar (asl nomlarni saqlang, har blok uchun oddiy tilda tushuntirish yozing, kod ekvivalent bo'lsin...) |
+| `prompts.SYSTEM_PROMPT` | LLM'ga **doimiy ko'rsatma**: rolingiz, qoidalar (asl nomlarni saqlang, har blok uchun oddiy tilda tushuntirish yozing, kod ekvivalent bo'lsin...) |
 | `prompts.build_user_message` | Har funksiya uchun so'rov matni: raqamlangan kod + statik tahlil topilmalari + yordamchi funksiyalar eslatmalari + ochilgan satrlar |
-| `prompts.build_fix_message` | Tekshiruv xato topsa, **aniq xatoni** (masalan, «`a=0x5, b=0x3` da asl 8, sizniki 9») Claude'ga qaytaradigan xabar |
-| `schema.DeobfResult`, `Block`, `Rename` | Claude javobining **qat'iy shakli**: `function_name`, `suggested_name`, `summary`, `simple_summary`, `techniques`, `c_code`, `blocks[]`, `renames[]`, `confidence`, `notes`. Offline ham xuddi shu shaklni qaytaradi |
-| `llm.ClaudeSession` | bitta funksiya bo'yicha suhbat: `ask()` so'rov yuboradi, `forget()` xato javobni keshdan o'chiradi |
-| `llm.make_client`, `llm.server_api_key` | Claude mijozini yaratadi; kalitni muhitdan oladi (tirnoq/bo'shliqlarni tozalab) |
+| `prompts.build_fix_message` | Tekshiruv xato topsa, **aniq xatoni** (masalan, «`a=0x5, b=0x3` da asl 8, sizniki 9») LLM'ga qaytaradigan xabar |
+| `schema.DeobfResult`, `Block`, `Rename` | LLM javobining **qat'iy shakli**: `function_name`, `suggested_name`, `summary`, `simple_summary`, `techniques`, `c_code`, `blocks[]`, `renames[]`, `confidence`, `notes`. Offline ham xuddi shu shaklni qaytaradi |
+| `llm.LLMSession` (eski nomi `ClaudeSession`) | bitta funksiya bo'yicha suhbat: `ask()` so'rov yuboradi (provayder model nomidan aniqlanadi: Claude → `_call_api`, DeepSeek → `_call_deepseek`), `forget()` xato javobni keshdan o'chiradi |
+| `llm.provider_of`, `llm.default_alias`, `llm.resolve_model` | model nomidan provayderni topadi (`deepseek…` → DeepSeek); standart modelni tanlaydi (DeepSeek kaliti bo'lsa `deepseek`, aks holda `sonnet`); `deepseek` → `deepseek-flash`, `deepseek-pro` → `deepseek-v4-pro` |
+| `deepseek.DeepSeekClient` (`chat`, `models`), `DeepSeekError` | DeepSeek bilan aloqa **faqat standart kutubxona (`urllib`) bilan**: yangi paket kerak emas; kalit faqat `Authorization` sarlavhasida; 429/500/503 da bir marta qayta urinadi; kutish chegarasi 90 s (`DEOBF_LLM_TIMEOUT`) |
+| `llm.make_client`, `llm.server_api_key` | provayder mijozini yaratadi; kalitni muhitdan oladi (`DEEPSEEK_API_KEY` yoki `ANTHROPIC_API_KEY`, tirnoq/bo'shliqlarni tozalab) |
 | `llm.check_api_key` | «Kalit ishlayaptimi?» (Models API, bepul) |
 | `llm.resolve_model` | `sonnet` → `claude-sonnet-5-5` |
 | `llm.UsageStats`, `llm.DiskCache` | token/narx hisobi; bir xil so'rovga javobni diskda saqlash ($0) |
@@ -534,38 +540,64 @@ ro'yxati; `deobf web` — brauzer interfeysi; `deobf check` — diagnostika (gcc
 
 ---
 
-## 7. Claude qismi: nima yuboriladi, nima qaytadi
+## 7. LLM qismi (DeepSeek va Claude): nima yuboriladi, nima qaytadi
 
-### 7.1. Yuboriladigan narsa
+Ikki provayder bor; qaysi biri ishlatilishi **model nomidan** aniqlanadi (`llm.provider_of`): `deepseek…` bilan boshlansa DeepSeek, aks holda Claude.
+Qolgan hamma narsa (statik tahlil, tekshiruv, agent sikli, hisobot) provayderga bog'liq emas: ikkalasi ham bir xil `DeobfResult` qaytaradi.
 
-`ClaudeSession._call_api` (`llm.py`) Anthropic'ning `messages.create` metodini chaqiradi:
+### 7.1. Yuboriladigan narsa (ikkala provayderda bir xil mazmun)
 
 * **system** = `prompts.SYSTEM_PROMPT` (doimiy qoidalar);
-* **user** = `prompts.build_user_message(...)`: raqamlangan psevdokod, kirish uslubi, **statik tahlil topilmalari** (Claude'ga «bu yerda MBA bor» deb
-  yordam beramiz, shunda u kam taxmin qiladi), yordamchi funksiyalarning tekshirilgan qisqacha tavsifi, ochilgan satrlar;
-* **`output_config.format` = JSON sxema** (`schema.DeobfResult`): model faqat shu shakldagi javob berishga majbur;
-* **`effort`** (past/o'rta/yuqori) va **`cache_control`** (takrorlanadigan qism arzon hisoblansin).
+* **user** = `prompts.build_user_message(...)`: raqamlangan psevdokod, kirish uslubi, **statik tahlil topilmalari** (LLM'ga «bu yerda MBA bor» deb
+  yordam beramiz, shunda u kam taxmin qiladi), yordamchi funksiyalarning tekshirilgan qisqacha tavsifi, ochilgan satrlar.
 
-### 7.2. Qaytadigan narsa
+Texnik farqlar:
+
+| | **Claude** (`_call_api`) | **DeepSeek** (`_call_deepseek`) |
+|---|---|---|
+| Javob shakli | `output_config.format` = JSON sxema: model faqat shu shaklda javob beradi | `response_format: json_object` (JSON rejimi) + sxema va namuna **prompt ichida**; javobni **o'zimiz** pydantic bilan tekshiramiz |
+| Noto'g'ri/bo'sh javob | sxema kafolatlaydi | hujjat bo'yicha noto'g'ri JSON bo'sh joylarga almashtiriladi: xatoni aytib **bir marta qayta so'raymiz** |
+| Chuqurlik | `effort` | past — o'ylash o'chiq; **o'rta — birinchi urinishda o'chiq, tekshiruv xato topib tuzatish so'ralganda yoqiladi**; yuqori — doim yoqilgan |
+| Kesh | `cache_control` (Anthropic) | avtomatik kontekst keshi (system prompt takrorlanganda arzon: `prompt_cache_hit_tokens`) |
+| Kalit | `ANTHROPIC_API_KEY` | `DEEPSEEK_API_KEY` |
+| Mijoz | `anthropic` kutubxonasi | `deepseek.DeepSeekClient` (standart kutubxona, yangi paket yo'q) |
+
+### 7.2. Nega «o'rta rejimda tuzatishda o'ylash yoqiladi» (haqiqiy o'lchov)
+
+`s2_opaque` (soxta shartli funksiya) da DeepSeek Flash o'ylashsiz rejimda funksiyani «odatdagi clamp» deb o'ylab, psevdokoddagi juft/toq
+tekshiruvini tashlab yubordi va **3 marta shu xatoni takrorladi** (tekshiruv uni to'g'ri ushladi, zaxira offline natija olindi). O'lchov (2026-11-16):
+
+| Rejim | Natija | Narx | Vaqt |
+|---|---|---|---|
+| Flash, o'ylash o'chiq (oldingi standart) | 3 marta xato → offline | $0.0076 | 30 s |
+| Flash + o'ylash | ✅ 1-urinishda | $0.0049 | 17 s |
+| Pro, o'ylash o'chiq | ✅ 1-urinishda | $0.0139 | 22 s |
+| Pro + o'ylash | ✅ 1-urinishda | $0.0583 | **132 s** (veb-sayt chegarasidan uzun) |
+| **Flash, yangi strategiya** (1-urinish o'ylashsiz, xatoda o'ylash) | ✅ **2-urinishda** (ikki marta takrorlandi) | $0.0079 | 29 s |
+
+Xulosa: avval tez va arzon urinamiz, faqat tekshiruv xato topsagina qimmat «o'ylash»ni yoqamiz. Pro + doim o'ylash ataylab standart emas.
+
+### 7.3. Qaytadigan narsa
 
 Tuzilmali JSON: `c_code` (toza kod), `blocks[]` (har bir blok: sarlavha, asl qatorlar, asl kod, yangi kod, **mutaxassis izohi**,
 **dehqoncha izoh**), `summary`/`simple_summary`, `techniques[]` (topilgan usullar), `renames[]` (o'zgaruvchilarga taklif qilingan
 mazmunli nomlar), `confidence`, `notes`.
 
-### 7.3. Nima uchun Claude javobiga ishonib bo'lmaydi va nima qilamiz
+### 7.4. Nega LLM javobiga ishonib bo'lmaydi va nima qilamiz
 
 1. `c_code` darhol `verifier.verify` ga beriladi.
-2. **Kompilyatsiya bo'lmasa** yoki **farq topilsa**, `build_fix_message` aniq xatoni (masalan, qaysi kirishda farq chiqqanini) Claude'ga
+2. **Kompilyatsiya bo'lmasa** yoki **farq topilsa**, `build_fix_message` aniq xatoni (masalan, qaysi kirishda farq chiqqanini) LLM'ga
    qaytaradi; ko'pi bilan 3 urinish.
 3. Xato javob keshda qolmasligi uchun `session.forget()`.
 4. Hammasi bo'lmasa, **offline natija** ham tekshirilib, ikkalasidan yaxshisi olinadi (`_better`).
-5. Claude xato qilsa yoki kalit ishlamasa (`LLMError`), tushunarli xabar chiqadi va offline natija beriladi: sayt buzilmaydi.
+5. LLM xato qilsa yoki kalit ishlamasa (`LLMError`), tushunarli xabar chiqadi (masalan, DeepSeek: «hisobda mablag' tugagan (402)») va offline natija beriladi: sayt buzilmaydi.
 
-### 7.4. Narx va tezlik
+### 7.5. Narx va tezlik
 
-5 ta funksiyada haqiqiy API bilan o'lchangan: **$0.024–0.039**, o'rtacha ≈ **$0.032 / funksiya**, 15–24 soniya, hammasi 1-urinishda
-tasdiqlandi (`docs/baholash_claude_sonnet.md`). Narxlar (`llm.PRICES`, $ / 1 mln token, kirish/chiqish): Haiku 0.10/0.50, Sonnet 2/10,
-Opus 4/20.
+* **DeepSeek Flash** (8 namuna, haqiqiy API): jami **$0.028**, funksiyasiga o'rtacha ≈ **$0.0035** ($0.0018–0.0097), 8–36 soniya; 8/8 tasdiqlandi (`docs/baholash_deepseek.md`).
+* **Claude Sonnet** (5 funksiya): **$0.024–0.039**, o'rtacha ≈ $0.032, 15–24 soniya, hammasi 1-urinishda (`docs/baholash_claude_sonnet.md`).
+* Narxlar (`llm.PRICES`, $ / 1 mln token, kirish/chiqish): DeepSeek Flash 0.30/1.20 (band soatlarda; bo'sh soatlarda yarmi), V4 Pro 1.32/3.96, Claude Haiku 0.10/0.50, Sonnet 2/10, Opus 4/20.
+  Hisobda **band soat narxi** olinadi (ehtiyot uchun), shuning uchun kunlik byudjet chegarasi hech qachon kam hisoblamaydi.
 
 ---
 
@@ -602,7 +634,7 @@ Hammasi `sandbox.run` orqali **cheklangan** sharoitda ishlaydi (vaqt, xotira che
 |---|---|---|
 | **verified** (Tasdiqlandi) | kompilyatsiya bo'ldi va barcha testlar mos keldi | ✅ qabul qilinadi |
 | **compiled** | kompilyatsiya bo'ldi, lekin avtomatik solishtirib bo'lmadi (masalan, parametr funksiya ko'rsatkichi) | qabul qilinadi, lekin «solishtirilmadi» deb belgilanadi |
-| **mismatch** | farq topildi: yangi kod boshqa natija beradi | Claude'ga aniq farq qaytariladi; offline darajasi pasaytiriladi |
+| **mismatch** | farq topildi: yangi kod boshqa natija beradi | LLM'ga aniq farq qaytariladi; offline darajasi pasaytiriladi |
 | **compile_error** | gcc kodni tushunmadi yoki imzo (nom, parametrlar, tur) o'zgargan | xuddi shunday |
 | **no_compiler** | gcc yo'q yoki kod ishga tushirish taqiqlangan | «Tekshirilmadi» deb belgilanadi |
 
@@ -631,8 +663,8 @@ uchun **regressiya testi** yozildi (`tests/test_audit_regressions.py`). Bu hikoy
 ### 9.1. Asosiy xavf
 
 Saytga kimdir **o'z kodini** yuboradi, biz uni kompilyatsiya qilib **ishga tushiramiz**. Bu begona kodni serverda bajarish degani. Agar u
-dastur serverning muhit o'zgaruvchilarini o'qisa, **sizning Claude kalitingizni** o'g'irlaydi. Ikkinchi xavf: har kim sizning kalitingiz
-bilan Claude'ni ishlatib, **pulingizni sarflaydi**.
+dastur serverning muhit o'zgaruvchilarini o'qisa, **sizning API kalitingizni** o'g'irlaydi. Ikkinchi xavf: har kim sizning kalitingiz
+bilan modelni ishlatib, **pulingizni sarflaydi**.
 
 ### 9.2. Himoya qatlamlari (yopiq sayt)
 
@@ -640,10 +672,10 @@ bilan Claude'ni ishlatib, **pulingizni sarflaydi**.
 |---|---|---|
 | Begona odam saytga kiradi | **Kirish kodi** (Render'da `DEOBF_ACCESS_CODE`); noto'g'ri urinish IP bo'yicha 5/15 daqiqa, butun sayt bo'yicha 40/soat | `/login` |
 | Kalit sahifaga chiqib ketadi | kalit faqat serverda; sahifaga hech qachon yozilmaydi (test shuni tekshiradi) | `llm.server_api_key` |
-| Kalit bilan pul sarflanadi | kunlik chegara ($2) tugasa Claude to'xtaydi; so'rovlar tezligi cheklangan | `Budget`, `RateLimiter` |
+| Kalit bilan pul sarflanadi | kunlik chegara ($2) tugasa LLM to'xtaydi; so'rovlar tezligi cheklangan | `Budget`, `RateLimiter` |
 | Kodsiz ochiq sayt kalitni ishlatadi | **kod yo'q bo'lsa kalit hech qachon ishlatilmaydi**; kalit bor-u kod yo'q bo'lsa sayt to'xtaydi va sozlashni so'raydi | `sandbox.configure`, `guard()` |
 | Begona kod serverni buzadi | kod **alohida huquqsiz foydalanuvchi** (uid 10002) nomidan, tozalangan muhit bilan, vaqt/xotira chegarasi bilan ishlaydi; server `root` bo'lib qoladi, shuning uchun sandbox foydalanuvchisi serverning xotirasi va muhit o'zgaruvchilarini (`/proc/<pid>/environ`) **o'qiy olmaydi** (lokalda sinab ko'rilgan: `Permission denied`) | `sandbox._limits`, `sandbox.run` |
-| Ajratish ishlamay qolsa | sayt ishga tushganda o'zi sinab ko'radi (`selftest_isolation`); ishlamasa to'liq tekshiruv **o'chiriladi** (xavfsizlik uchun), Claude va offline ishlayveradi | `sandbox.configure` |
+| Ajratish ishlamay qolsa | sayt ishga tushganda o'zi sinab ko'radi (`selftest_isolation`); ishlamasa to'liq tekshiruv **o'chiriladi** (xavfsizlik uchun), LLM va offline ishlayveradi | `sandbox.configure` |
 | Boshqa sayt sizning nomingizdan so'rov yuboradi (CSRF) | `Origin` / `Sec-Fetch-Site` tekshiruvi | `guard()` |
 | Sahifaga zararli skript kiritiladi (XSS) | qat'iy **CSP** (`script-src 'self'`), natijalar ekranlanadi | `security_headers` |
 
@@ -653,14 +685,15 @@ bilan Claude'ni ishlatib, **pulingizni sarflaydi**.
 |---|---|---|---|
 | **Lokal** (`deobf web`) | o'z kompyuteringizda | `.env` dagi kalit | ha |
 | **Ochiq sayt** (`DEOBF_PUBLIC=1`, kodsiz, kalitsiz) | hammaga ochiq namuna | har kim o'zinikini kiritadi | **yo'q** («Tekshirilmadi») |
-| **Yopiq sayt** (`DEOBF_PUBLIC=1` + `DEOBF_ACCESS_CODE` + `ANTHROPIC_API_KEY`) | **sizniki** | serverda, doim ulangan | ha (alohida foydalanuvchi nomidan) |
+| **Yopiq sayt** (`DEOBF_PUBLIC=1` + `DEOBF_ACCESS_CODE` + `DEEPSEEK_API_KEY` yoki `ANTHROPIC_API_KEY`) | **sizniki** | serverda, doim ulangan | ha (alohida foydalanuvchi nomidan) |
 
 ### 9.4. Render'dagi sozlamalar
 
 | Nomi | Kim beradi | Vazifasi |
 |---|---|---|
 | `DEOBF_ACCESS_CODE` | **siz** (Render → Environment) | kirish kodi |
-| `ANTHROPIC_API_KEY` | **siz** (Render → Environment) | Claude kaliti |
+| `DEEPSEEK_API_KEY` | **siz** (Render → Environment) | DeepSeek kaliti (platform.deepseek.com): standart model |
+| `ANTHROPIC_API_KEY` | siz, **ixtiyoriy** | Claude kaliti: faqat Claude ham kerak bo'lsa. Eski/yaroqsiz kalitni o'chirib tashlang |
 | `DEOBF_PUBLIC=1`, `DEOBF_TRUSTED_PROXIES=1`, `DEOBF_SANDBOX_UID=10002` | `Dockerfile` | ochiq/xavfsiz rejim, haqiqiy mijoz IP'si, sandbox foydalanuvchisi |
 | `DEOBF_DAILY_BUDGET_USD` | ixtiyoriy (standart 2) | kunlik chegara |
 | `DEOBF_SESSION_SECRET` | Render o'zi yaratadi | kirish cookie'sini imzolash |
@@ -696,8 +729,8 @@ Loyiha 2026-10-08 dan 2026-11-04 gacha 21 ta commit bilan qurildi (batafsil: `do
 |---|---|---|
 | 1 | Loyiha asosi, 5 ta (keyin 8 ta) test namunasi: toza C yozdik → chalkashtirdik → gcc → **angr** bilan dekompilyatsiya | «to'g'ri javob»ni bilamiz |
 | 2 | `parser.py` | IDA/Ghidra/angr/C ni taniydi |
-| 3 | `expr.py`, `detectors.py`: statik tahlil | Claude'siz chalkashlikni topadi |
-| 4 | `prompts.py`, `schema.py`, `llm.py`, `offline.py` | Claude va offline rejim |
+| 3 | `expr.py`, `detectors.py`: statik tahlil | LLM'siz chalkashlikni topadi |
+| 4 | `prompts.py`, `schema.py`, `llm.py`, `offline.py` | LLM (Claude) va offline rejim |
 | 5 | `verifier.py`, `harness.py`, `agent.py` | tekshiruv va o'z-o'zini tuzatish sikli = **agent** |
 | 6 | `cli.py`, `report.py`, `web/` | terminal va brauzer |
 | 7 | `evaluate.py`, `unflatten.py` | baholash; tekislashni avtomatik yechish (birinchi baholashda u yechilmay qolgani ma'lum bo'ldi) |
@@ -705,6 +738,7 @@ Loyiha 2026-10-08 dan 2026-11-04 gacha 21 ta commit bilan qurildi (batafsil: `do
 | 9 | Murakkab kod (bufer, tashqi chaqiruv), soddalashtirish, UI qayta dizayn, «dehqoncha» rejim, ochiq sayt rejimi | yaxshilangan vosita |
 | 10 | **5 ta mustaqil audit**, 18 ta jiddiy xato tuzatildi, Sonnet 5.5 standart, har blok tushunarli (`narrate.py`, `blocks.py`) | ishonchliroq vosita |
 | 11 | Yopiq sayt: kirish kodi, server kaliti, byudjet, foydalanuvchi ajratish; Render'ga joylash; 4 muammo tuzatildi (9.6) | ishlaydigan jonli sayt |
+| 12 | **DeepSeek** provayderi: `deepseek.py`, `LLMSession`, JSON rejimi, o'ylash strategiyasi, haqiqiy API'da 8 namuna 8/8 | Claude kaliti almashtirilgach ham loyiha ishlaydi; ≈ 10 baravar arzon |
 
 **Asosiy saboqlar:**
 1. «Tasdiqlandi» so'zi faqat tekshiruv nimani topa olmasligini bilgandagina ma'noli (8.5).
@@ -725,10 +759,11 @@ Loyiha 2026-10-08 dan 2026-11-04 gacha 21 ta commit bilan qurildi (batafsil: `do
 | Qatorlar | **216 → 95** (−56%) | kod qisqardi |
 | 21 ta realistik IDA/Ghidra uslubidagi kirish (61 funksiya) | **50** tasdiqlandi, 6 `compiled`, 5 `compile_error`, **mismatch — 0** | noto'g'ri natija yo'q; solishtirib bo'lmaganlari (C++ nomlari, ba'zi Ghidra `CONCAT`) ochiq cheklov |
 | Claude Sonnet 5.5 (5 funksiya, haqiqiy API) | hammasi 1-urinishda tasdiqlandi; **$0.024–0.039** / funksiya; 15–24 s | arzon va ishonchli, lekin tanlama kichik |
-| Avtomatik testlar | **123 / 123** | `python -m pytest -q` |
+| **DeepSeek Flash (8 namuna, haqiqiy API)** | **8 / 8** tasdiqlandi (7 tasi 1-urinishda, `s2_opaque` 2-urinishda); jami **$0.028**, o'rtacha ≈ $0.0035 / funksiya; 8–36 s | Claude'dan ≈ 10 baravar arzon; o'z-o'zini tuzatish sikli haqiqiy modelda ishladi |
+| Avtomatik testlar | **156 / 156** | `python -m pytest -q` |
 | Brauzer sinovi (Chromium, kompyuter va telefon o'lchami) | o'tdi | forma, tugmalar, ranglash, kalit holati |
 
-*(8 namunaning to'liq jadvali: `docs/baholash_offline.md`; Claude: `docs/baholash_claude_sonnet.md`. 21 kirishlik tekshiruv 10-bosqichda
+*(8 namunaning to'liq jadvali: `docs/baholash_offline.md`; Claude: `docs/baholash_claude_sonnet.md`; DeepSeek: `docs/baholash_deepseek.md`. 21 kirishlik tekshiruv 10-bosqichda
 o'lchangan.)*
 
 ---
@@ -744,9 +779,9 @@ o'lchangan.)*
 | **Murakkab tekislash** | ichma-ich `switch`, ba'zi shakllar yechilmaydi (kod tegmasdan qoladi: buzmaydi) |
 | **Chaqiruv argumenti ichidagi MBA** | `f((a^b)+2*(a&b))` ichidagi ifoda soddalashtirilmaydi |
 | **C++ nomlari, ba'zi Ghidra `CONCAT`** | kompilyatsiya bo'lmaydi |
-| **Claude rejimi kichik tanlamada sinalgan** | 5 funksiya; xato tuzatish sikli va zararli kodni rad etish haqiqiy Claude bilan ko'rilmagan (soxta mijoz bilan testlangan) |
-| **Kod Anthropic'ga yuboriladi** | maxfiy kod uchun Offline rejim ishlating |
-| **4 xonali kirish kodi kuchsiz** | urinishlar cheklangan, kunlik byudjet bor, lekin imkonsiz emas; uzunroq kod va Anthropic'da oylik limit tavsiya etiladi |
+| **LLM rejimi kichik tanlamada sinalgan** | Claude: 5 funksiya; DeepSeek: 8 namuna. Zararli kodni rad etish (refusal) haqiqiy modelda ko'rilmagan (soxta mijoz bilan testlangan); DeepSeek'da o'ylash yoqilganda va Pro modelida 2 daqiqagacha cho'zilishi mumkin |
+| **Kod tanlangan provayderga yuboriladi** (DeepSeek yoki Anthropic) | maxfiy kod uchun Offline rejim ishlating. DeepSeek — Xitoy kompaniyasi: ma'lumotlar qayerda va qanday saqlanishini rasmiy maxfiylik siyosatidan o'qing (ustozga javob berishdan oldin) |
+| **4 xonali kirish kodi kuchsiz** | urinishlar cheklangan, kunlik byudjet bor, lekin imkonsiz emas; uzunroq kod va provayder hisobida (platform.deepseek.com / console.anthropic.com) oylik limit tavsiya etiladi |
 | **Yopiq saytda kod serverda ishga tushadi** | huquqsiz foydalanuvchi nomidan, lekin to'liq izolyatsiya (gVisor/VM kabi) yo'q: faqat ishonchli kishilarga kod bering |
 | **Render'da ajratish sinalmagan** | lokalda sinalgan; Render konteynerida ishlashini sahifadagi «Tasdiqlandi/Tekshirilmadi» ko'rsatadi |
 | **Dekompilyator xatolari** | angr ba'zan o'zi xato qiladi; vosita psevdokodni etalon deb oladi |
@@ -756,7 +791,7 @@ o'lchangan.)*
 ## 13. Ustoz savollari va javoblari
 
 Har bir javob **qisqa variant** (og'zaki aytish uchun) va kerak bo'lsa **chuqurroq** qismdan iborat. Savollar guruhlangan.
-Eng ko'p so'raladigan 14 tasi **★** bilan belgilangan (jami 51 ta savol).
+Eng ko'p so'raladigan 16 tasi **★** bilan belgilangan (jami 56 ta savol).
 
 ### A. Mavzu va umumiy savollar
 
@@ -778,9 +813,9 @@ Bizning vosita `.exe` ni ochmaydi; u dekompilyatorning **chiqishini** oladi (1.4
 tushunarli* kod beramiz va shuning uchun «ekvivalent» deymiz, «asl» demaymiz.
 
 **★ A5. Nega buni «agent» deysiz?**
-Chunki u bir martalik «kirish → chiqish» emas, **sikl**: Claude'dan javob oladi → **tekshiradi** → xato bo'lsa xatoni qaytarib **qayta urinadi**
+Chunki u bir martalik «kirish → chiqish» emas, **sikl**: LLM'dan javob oladi → **tekshiradi** → xato bo'lsa xatoni qaytarib **qayta urinadi**
 (3 martagacha) → bo'lmasa zaxira (offline) yo'lga o'tadi. Ya'ni natijasiga qarab harakatini o'zgartiradi. *Halollik uchun:* bu tor, qat'iy
-sikl; qadamlar tartibini Claude emas, biz belgilaganmiz (ishonchlilik uchun ataylab). Erkin «o'zi rejalashtiradigan» agent emas (1.3).
+sikl; qadamlar tartibini LLM emas, biz belgilaganmiz (ishonchlilik uchun ataylab). Erkin «o'zi rejalashtiradigan» agent emas (1.3).
 
 **A6. Nega LLM kerak? Qoidalar bilan ham soddalashtirdingiz-ku.**
 Qoidalar faqat *oldindan biladigan* shakllarni yecha oladi. LLM noma'lum shaklni ham tushunadi, o'zgaruvchilarga mazmunli nom beradi va
@@ -806,15 +841,16 @@ Mening bilishimcha, bor: masalan IDA uchun **D-810** plagini (tekislash va soxta
 soddalashtirish uchun **Arybo** kabi tadqiqot vositalari. Bizning farqimiz: (1) LLM bilan tushuntirish, (2) **har bir natijani avtomatik
 tekshirish**, (3) har blok uchun oddiy tilda izoh. *(Ustozga aytishdan oldin bu nomlarni internetda bir marta tekshirib oling.)*
 
-### B. LLM (Claude) haqida
+### B. LLM (DeepSeek, Claude) haqida
 
 **★ B1. LLM xato qilsa-chi?**
-Aynan shuning uchun tekshiruv bor: javob kompilyatsiya qilinadi va asl kod bilan 2000 kirishda solishtiriladi. Xato bo'lsa, aniq farq Claude'ga
+Aynan shuning uchun tekshiruv bor: javob kompilyatsiya qilinadi va asl kod bilan 2000 kirishda solishtiriladi. Xato bo'lsa, aniq farq LLM'ga
 qaytariladi (3 marta). Baribir bo'lmasa, tekshirilgan offline natija olinadi. Hech qachon tekshirilmagan natija «tasdiqlandi» deb ko'rsatilmaydi.
 
-**B2. Nega Sonnet? Haiku yoki Opus emas?**
-Sifat va narx muvozanati: Sonnet ≈ $0.03/funksiya. Haiku ancha arzon (≈ $0.002–0.005), Opus kuchliroq (≈ $0.06–0.15). Saytda uchalasini
-tanlash mumkin (`llm.MODEL_ALIASES`, `web.app.ENGINES`).
+**B2. Qaysi model standart va nega?**
+DeepSeek kaliti bo'lsa — **DeepSeek Flash** (o'rtacha ≈ $0.0035/funksiya, 8 namunada 8/8 tasdiqlandi); kuchliroq kerak bo'lsa **V4 Pro** (≈ $0.014).
+Kalit faqat Claude'niki bo'lsa — Sonnet (≈ $0.03), Haiku arzonroq (≈ $0.002–0.005), Opus kuchliroq (≈ $0.06–0.15). Saytda hammasini tanlash mumkin
+(`llm.MODEL_ALIASES`, `web.app.ENGINES`); yopiq saytda faqat serverda kaliti bor provayderlarning modellari ko'rsatiladi.
 
 **B3. Prompt nega inglizcha?**
 Modellar ingliz tilidagi ko'rsatmalarga aniqroq amal qiladi va ingliz matni kamroq token egallaydi (arzonroq). Natija (izohlar) esa
@@ -825,21 +861,44 @@ System prompt'da aniq yozilgan: psevdokod, izohlar va matnlar **ma'lumot**, ular
 hatto model aldansa ham, `c_code` baribir kompilyatsiya va testdan o'tishi kerak; farqli kod «tasdiqlandi» bo'lmaydi. Lekin *tushuntirish
 matnini* (izohni) tekshirib bo'lmaydi: u shubhali bo'lsa, kod bilan solishtirib ko'ring.
 
-**B5. Maxfiy kodni Anthropic'ga yuborish xavfli emasmi?**
-Ha, Claude rejimida kod Anthropic API'ga yuboriladi. Maxfiy yoki zararli namunalar uchun **Offline rejim** bor: hech narsa tashqariga
+**B5. Maxfiy kodni LLM provayderiga yuborish xavfli emasmi?**
+Ha, LLM rejimida kod tanlangan provayderga (DeepSeek yoki Anthropic) yuboriladi. Maxfiy yoki zararli namunalar uchun **Offline rejim** bor: hech narsa tashqariga
 chiqmaydi. Bu tanlov foydalanuvchida.
 
 **B6. Nega «tuzilmali chiqish» (structured output)?**
-Model erkin matn yozsa, uni «ajratib olish» xato beradi. Sxema (`schema.DeobfResult`) bilan model **faqat shu shakldagi JSON** beradi:
-kod, bloklar, nomlar alohida maydonlarda. Javob kesilsa yoki rad etilsa, tushunarli xato chiqadi (`LLMError`).
+Model erkin matn yozsa, uni «ajratib olish» xato beradi. Sxema (`schema.DeobfResult`) bilan model JSON beradi: kod, bloklar, nomlar alohida maydonlarda.
+Claude sxemani **majburlaydi**; DeepSeek'da faqat «JSON rejimi» bor, shuning uchun sxemani prompt'ga yozamiz va javobni o'zimiz pydantic bilan tekshiramiz. Javob kesilsa yoki rad etilsa, tushunarli xato chiqadi (`LLMError`).
 
 **B7. Kesh nima va nega kerak?**
 Bir xil so'rovga javobni diskda saqlaymiz (`DiskCache`): ikkinchi marta $0 va tez. Xato (tekshiruvdan o'tmagan) javoblar keshdan **o'chiriladi**
-(`forget`), aks holda xato javob qayta-qayta «arzon» qaytib kelardi. Anthropic tomonida ham **prompt kesh** bor (`cache_control`).
+(`forget`), aks holda xato javob qayta-qayta «arzon» qaytib kelardi. Provayder tomonida ham kesh bor: Anthropic'da `cache_control`, DeepSeek'da avtomatik kontekst keshi.
 
-**B8. Claude bilan haqiqatan sinadingizmi?**
-Ha: 5 funksiyada, hammasi 1-urinishda tasdiqlandi, $0.024–0.039. *Lekin* tanlama kichik; xato tuzatish sikli va zararli kodni rad etishi
-haqiqiy Claude bilan ko'rilmagan (soxta mijoz bilan testlangan).
+**B8. Haqiqiy API'lar bilan sinadingizmi?**
+Ha. **Claude Sonnet:** 5 funksiya, hammasi 1-urinishda tasdiqlandi, $0.024–0.039. **DeepSeek Flash:** 8 namunaning hammasi, 8/8 tasdiqlandi, jami $0.028;
+`s2_opaque` da model 1-urinishda xato qildi, tekshiruv buni ushladi va 2-urinishda (o'ylash yoqilgach) to'g'ri chiqdi: o'z-o'zini tuzatish sikli haqiqiy
+modelda ishlaganini ko'rdik. *Lekin* tanlamalar kichik; zararli kodni rad etish (refusal) haqiqiy modelda ko'rilmagan (soxta mijoz bilan testlangan).
+
+**★ B9. Nega endi DeepSeek?**
+Claude kaliti almashtirilganidan keyin DeepSeek'ga o'tdik. Sabablar: **narx** (o'rtacha ≈ $0.0035 va Sonnet ≈ $0.03: taxminan 10 baravar arzon) va sifat 8 namunada
+yetarli darajada: hammasi tekshiruvdan o'tdi. Loyiha ikkala provayderni qo'llab-quvvatlaydi va kalitga qarab tanlaydi: kodning qolgan qismi o'zgarmadi.
+
+**B10. Ikki provayderni qanday qo'llab-quvvatlaysiz? Arxitektura nima bo'ldi?**
+Provayder model nomidan aniqlanadi (`llm.provider_of`). `LLMSession` bitta interfeys: `ask()`; ichida Claude yoki DeepSeek chaqiruvi (`_call_api` / `_call_deepseek`).
+Agent, tekshiruv va hisobot provayderni bilmaydi, chunki ikkalasi ham `DeobfResult` qaytaradi. DeepSeek uchun alohida yupqa mijoz (`deepseek.py`, standart kutubxona).
+Yangi provayder qo'shish: bitta mijoz va bitta `_call_*` metodi.
+
+**B11. DeepSeek JSON rejimi Claude'ning tuzilmali chiqishidan nimasi bilan farq qiladi?**
+Claude sxemani **majburlaydi** (javob albatta mos). DeepSeek faqat «JSON bo'lsin» deydi: sxemaga mos kelishini kafolatlamaydi va noto'g'ri JSON'ni bo'sh joyga almashtiradi.
+Shuning uchun biz sxemani prompt'ga yozamiz, javobni pydantic bilan tekshiramiz va xatoda bir marta qayta so'raymiz. Baribir bo'lmasa, tushunarli xato va offline zaxira.
+
+**★ B12. «O'ylash» (thinking) rejimi nima va nega avtomatik yoqiladi?**
+Model javobdan oldin ichida «o'ylaydi»: aniqroq, lekin sekinroq va qimmatroq. Haqiqiy o'lchov (7.2): Flash o'ylashsiz qiyin funksiyada 3 marta xato qildi, o'ylash bilan 1-urinishda
+to'g'ri yozdi. Doim yoqish qimmat (Pro bilan 132 s, $0.058), shuning uchun faqat tekshiruv xato topgandagina yoqamiz: avval tez va arzon urinamiz.
+
+**B13. DeepSeek ma'lumotlarni qayerga yuboradi? Xavfsizmi?**
+Kod DeepSeek API'siga yuboriladi (DeepSeek — Xitoy kompaniyasi). Ma'lumot qayerda va qancha saqlanishi haqida aniq javobni ularning rasmiy maxfiylik siyosatidan o'qib oling;
+bu hujjatda uni taxmin qilib yozmadik. Maxfiy yoki zararli namunalar uchun **Offline rejim**: hech narsa tashqariga chiqmaydi. Kalit sahifaga, logga va xato matniga
+hech qachon tushmaydi (testlar tekshiradi).
 
 ### C. Tekshiruv haqida
 
@@ -885,34 +944,34 @@ keyin **0** (faqat ifodalar), oxirida **−1** (hech narsa o'zgartirilmaydi, amm
 (orqaga qaytish) va shartni (ikkiga ajralish) tiklaydi. Yecha olmasa `None` qaytaradi va kod tegmasdan qoladi (5.4).
 
 **D5. Bir funksiya boshqasini chaqirsa-chi?**
-`agent._callee_first` avval chaqiriladigan (yordamchi) funksiyalarni tahlil qiladi; ularning qisqa tavsifi chaqiruvchi funksiya uchun Claude'ga
+`agent._callee_first` avval chaqiriladigan (yordamchi) funksiyalarni tahlil qiladi; ularning qisqa tavsifi chaqiruvchi funksiya uchun LLM'ga
 beriladi. Odam ham kodni shunday o'qiydi (pastdan yuqoriga). Yordamchi nomi saqlanadi, shunda chaqiruvchi kod buzilmaydi.
 
-**D6. Tushuntirishni kim yozadi: Claude yoki dastur?**
-Ikkalasi: **offline** rejimda `narrate.py` (qoidalar) har ifodani o'zbekcha gapga aylantiradi; **Claude** rejimida model yozadi. Har ikkisi
+**D6. Tushuntirishni kim yozadi: LLM yoki dastur?**
+Ikkalasi: **offline** rejimda `narrate.py` (qoidalar) har ifodani o'zbekcha gapga aylantiradi; **LLM** rejimida model yozadi. Har ikkisi
 ham har blok uchun ikki matn beradi: mutaxassis va «dehqoncha».
 
 **D7. Nega Python?**
-Matn bilan ishlash, tez yozish, Claude/Flask/pytest kutubxonalari tayyor, angr ham Python'da. Tezlik muammo emas: asosiy vaqt Claude javobini
+Matn bilan ishlash, tez yozish, Anthropic/Flask/pytest kutubxonalari tayyor, angr ham Python'da. Tezlik muammo emas: asosiy vaqt LLM javobini
 kutishda ketadi.
 
 **D8. Loyiha qanchalik katta?**
-~6200 qator Python (`deobf_agent/`), 123 ta avtomatik test, 8 ta test namunasi, hujjatlar. Eng katta fayllar: `narrate.py` (785),
+~6500 qator Python (`deobf_agent/`), 156 ta avtomatik test, 8 ta test namunasi, hujjatlar. Eng katta fayllar: `narrate.py` (785),
 `harness.py` (731), `detectors.py` (687), `expr.py` (578).
 
 **D9. Qanday testlagansiz?**
-`pytest`: parser, detektorlar, tekislash, Claude moduli (**soxta mijoz** bilan: haqiqiy API'siz, pulsiz), agent, differensial test, tushuntirish,
+`pytest`: parser, detektorlar, tekislash, LLM moduli (**soxta mijoz** bilan: haqiqiy API'siz, pulsiz; DeepSeek uchun mahalliy HTTP server bilan ham), agent, differensial test, tushuntirish,
 veb va xavfsizlik, audit regressiyalari. Veb sahifani haqiqiy brauzerda (Playwright + Chromium) ham tekshirdik.
 
 ### E. Xavfsizlik va joylash
 
 **★ E1. Kalitingiz qayerda saqlanadi va uni kim ishlata oladi?**
-Faqat Render'ning Environment bo'limida (`ANTHROPIC_API_KEY`): kodda ham, GitHub'da ham, sahifada ham yo'q. Uni faqat **kirish kodi bilan
+Faqat Render'ning Environment bo'limida (`DEEPSEEK_API_KEY`, ixtiyoriy `ANTHROPIC_API_KEY`): kodda ham, GitHub'da ham, sahifada ham yo'q. Uni faqat **kirish kodi bilan
 kirganlar** ishlata oladi; kodsiz sayt kalitni umuman ishlatmaydi. Kunlik chegara $2.
 
 **★ E2. Boshqalar kalitimdan foydalanib pulimni sarflasa-chi?**
-Kod bilan himoyalangan (urinishlar cheklangan), kunlik byudjet ($2) va so'rovlar tezligi cheklangan. Qo'shimcha: Anthropic'da **oylik limit** qo'yish.
-Kalit chatga yoki GitHub'ga tushib qolsa, uni darhol console.anthropic.com da bekor qilib yangisini yarating.
+Kod bilan himoyalangan (urinishlar cheklangan), kunlik byudjet ($2) va so'rovlar tezligi cheklangan. Qo'shimcha: provayder hisobida **oylik limit** qo'yish (DeepSeek hisobi oldindan to'ldiriladi: balans tugasa to'xtaydi, bu ham himoya).
+Kalit chatga yoki GitHub'ga tushib qolsa, uni darhol provayder saytida (platform.deepseek.com yoki console.anthropic.com) bekor qilib yangisini yarating.
 
 **E3. Saytda begona kodni ishga tushirish xavfli emasmi?**
 Xavfli. Shuning uchun: ochiq saytda kod umuman ishga tushirilmaydi; yopiq saytda faqat kod bilan kirganlar uchun, huquqsiz foydalanuvchi nomidan,
@@ -943,10 +1002,10 @@ to'xtaydi va sozlashni aytadi (9.6).
 
 **★ F1. Natijalaringiz qanday?**
 8/8 namunada psevdokodga ekvivalent; murakkablik 58 → 21 (−64%), qatorlar 216 → 95 (−56%); 21 ta realistik kirishda (61 funksiya) noto'g'ri natija
-(mismatch) 0; 123 ta avtomatik test; Claude Sonnet: 5/5 tasdiqlandi, ≈ $0.03 / funksiya (11-bo'lim).
+(mismatch) 0; 156 ta avtomatik test; DeepSeek Flash: 8/8 tasdiqlandi, jami $0.028; Claude Sonnet: 5/5, ≈ $0.03 / funksiya (11-bo'lim).
 
 **★ F2. Nimalarni qilolmadingiz?**
-Real IDA/Ghidra va real obfuskatorlar bilan sinash; virtualizatsiya; matematik isbot (SMT); Claude'ning xato tuzatish sikli haqiqiy API bilan;
+Real IDA/Ghidra va real obfuskatorlar bilan sinash; virtualizatsiya; matematik isbot (SMT); zararli kodni rad etish (refusal) haqiqiy modelda;
 Render konteynerida izolyatsiyani tekshirish (12-bo'lim).
 
 **F3. Keyingi qadam nima bo'lishi mumkin?**
@@ -955,7 +1014,7 @@ baholovi (foydalanuvchi so'rovi): izohlar haqiqatan tushunarlimi?
 
 **★ F4. Bu loyihani kim yozdi?** *(Halol javob tayyorlab qo'ying.)*
 Loyiha **sun'iy intellekt yordamchisi (Claude Code)** bilan, sizning rahbarligingizda ishlab chiqilgan: siz mavzuni, talablarni, qarorlarni
-(Claude API, IDA/Ghidra, CLI + veb, yopiq sayt, kirish kodi) belgiladingiz, natijalarni sinab ko'rdingiz, joyladingiz. Ustoz qoidalariga qarab buni
+(Claude va keyin DeepSeek API, IDA/Ghidra, CLI + veb, yopiq sayt, kirish kodi) belgiladingiz, natijalarni sinab ko'rdingiz, joyladingiz. Ustoz qoidalariga qarab buni
 ochiq ayting. Eng muhimi: **har bir qismni tushuntira olishingiz**: shu hujjat aynan shu uchun. Ustoz «bu qismni tushuntiring» desa, 6-bo'limdagi jadvaldan
 funksiyani topib, 5-bo'limdagi misol bilan ko'rsating.
 
@@ -997,9 +1056,9 @@ xavf: tekshiruv ko'rmaydigan holatlar (12-bo'lim).
 1. **Muammo (1 daqiqa).** `samples/decompiled/s5_combined.angr.c` ni oching: uzun kod, `while(1){switch}`, ma'nosiz nomlar (`v0`, `v3`). «Mana shuni tushunish qiyin».
 2. **Sayt (2 daqiqa).** «Namuna: s5_combined» → Model **Offline** → «Tahlil qilish». Ko'rsating: chapda asl, o'ngda soddalashtirilgan kod (qatorlar keskin kamayadi);
    **«Tasdiqlandi»**; xulosa «FNV-1a xesh hisoblaydi»; **«Oddiy tilda»** tugmasi.
-3. **Claude (1 daqiqa).** Model **Sonnet** → bitta funksiya → mazmunli nom va izoh. Sahifada «Server kaliti ulangan» yozuvi bor.
+3. **LLM (1 daqiqa).** Model **DeepSeek** → bitta funksiya → mazmunli nom va izoh. Sahifada «Server kaliti ulangan» yozuvi bor.
 4. **Tekshiruv nima ekanini ayting (1 daqiqa).** «Kodni gcc bilan kompilyatsiya qilib, asl kod bilan 2000 marta solishtiramiz. Isbot emas, kuchli dalil».
-5. **Raqamlar (30 s).** 8/8, murakkablik 58 → 21, 123 test.
+5. **Raqamlar (30 s).** 8/8, murakkablik 58 → 21, 156 test, DeepSeek bilan 8 namuna jami $0.028.
 6. **Halollik (1 daqiqa).** «Kodni mustaqil tekshiruvchilar bilan sindirdik, 18 ta jiddiy xato topildi (ba'zilari «tasdiqlandi»mizni yolg'on qilib qo'yardi) va
    hammasi tuzatildi».
 
@@ -1007,8 +1066,8 @@ xavf: tekshiruv ko'rmaydigan holatlar (12-bo'lim).
 
 > «Dasturni `.exe` qilib beradilar; ichida nima borligini bilish uchun IDA yoki Ghidra ochamiz, u C ga o'xshash matn (psevdokod) chiqaradi. Lekin ba'zi
 > dasturlar ataylab shunday yozilganki (obfuskatsiya), bu matn ham tushunarsiz. Biz shu matnni oladigan vosita yaratdik. U avval chalkashlikni **topadi**
-> (masalan, oddiy `a+b` o'rniga uzun mantiqiy ifoda), keyin **soddalashtiradi** (qoidalar bilan yoki Claude sun'iy intellekti bilan), keyin natijani
-> **tekshiradi**: yangi kodni kompilyatsiya qilib, eskisi bilan 2000 ta tasodifiy kirishda solishtiradi. Xato bo'lsa, Claude'ga qaytarib qayta urinadi.
+> (masalan, oddiy `a+b` o'rniga uzun mantiqiy ifoda), keyin **soddalashtiradi** (qoidalar bilan yoki sun'iy intellekt bilan: DeepSeek yoki Claude), keyin natijani
+> **tekshiradi**: yangi kodni kompilyatsiya qilib, eskisi bilan 2000 ta tasodifiy kirishda solishtiradi. Xato bo'lsa, modelga qaytarib qayta urinadi.
 > Oxirida har bir blokni o'zbek tilida, hatto kompyuterni bilmaydigan odamga ham tushunarli qilib tushuntiradi. Hammasi brauzerdagi saytda ishlaydi;
 > kalit serverda, kirish kodi bilan.»
 
@@ -1018,10 +1077,11 @@ xavf: tekshiruv ko'rmaydigan holatlar (12-bo'lim).
 |---|---|
 | Sayt ochilmaydi yoki juda sekin | Render uxlab qolgan: 30–60 soniya kuting; yangilang |
 | «Sayt hali yopilmagan: kirish kodi qo'yilmagan» | Render → Environment → `DEOBF_ACCESS_CODE` qo'shing → Save |
-| «Serverda Claude kaliti ulanmagan» | Render → Environment → `ANTHROPIC_API_KEY` yo'q yoki nomi xato (sahifa o'xshash nomlarni ko'rsatadi) |
-| «Kalit noto'g'ri yoki bekor qilingan» | console.anthropic.com da yangi kalit yarating, Render'da qiymatni almashtiring |
-| «Tekshirilmadi» chiqdi | Render konteynerida kod ishga tushirish ajratilishi sinovdan o'tmagan (log'da «OGOHLANTIRISH»); Claude va offline ishlaydi. Zaxira: lokal rejim |
-| «Bugungi byudjet tugadi» | Offline rejim ishlayveradi; ertaga yoki `DEOBF_DAILY_BUDGET_USD` oshirilgach Claude yana ishlaydi |
+| «Serverda API kaliti ulanmagan» | Render → Environment → `DEEPSEEK_API_KEY` (yoki `ANTHROPIC_API_KEY`) yo'q yoki nomi xato (sahifa o'xshash nomlarni ko'rsatadi) |
+| «Kalit noto'g'ri yoki bekor qilingan» | platform.deepseek.com (Claude uchun console.anthropic.com) da yangi kalit yarating, Render'da qiymatni almashtiring |
+| «DeepSeek hisobida mablag' tugagan (402)» | platform.deepseek.com da hisobni to'ldiring; shu orada Offline rejim ishlaydi |
+| «Tekshirilmadi» chiqdi | Render konteynerida kod ishga tushirish ajratilishi sinovdan o'tmagan (log'da «OGOHLANTIRISH»); LLM va offline ishlaydi. Zaxira: lokal rejim |
+| «Bugungi byudjet tugadi» | Offline rejim ishlayveradi; ertaga yoki `DEOBF_DAILY_BUDGET_USD` oshirilgach model yana ishlaydi |
 | «Juda ko'p noto'g'ri urinish» | Kod noto'g'ri terilgan; 10–15 daqiqa kuting |
 | Internet yo'q | Lokal rejim: `3_web_ishga_tushirish.bat` yoki `python -m deobf_agent web`; Offline rejim internetsiz ishlaydi |
 
@@ -1032,14 +1092,14 @@ xavf: tekshiruv ko'rmaydigan holatlar (12-bo'lim).
 1. **Obfuskatsiya** — ataylab chalkashtirish; **deobfuskatsiya** — uni olib tashlash; asl kodni tiklash emas, **ekvivalent** tushunarli kod berish.
 2. Kirish: **dekompilyator psevdokodi** (IDA/Ghidra/angr), `.exe` emas.
 3. Tartib: **topish → soddalashtirish → tekshirish → tushuntirish**.
-4. Soddalashtirish ikki yo'l bilan: **qoidalar** (offline, bepul) yoki **Claude** (≈ $0.03/funksiya).
-5. Eng muhim qadam **tekshiruv**: gcc + differensial test (2000 kirish). Claude'ning javobiga ko'r-ko'rona ishonmaymiz.
+4. Soddalashtirish ikki yo'l bilan: **qoidalar** (offline, bepul) yoki **LLM**: DeepSeek (≈ $0.003/funksiya) yoki Claude (≈ $0.03).
+5. Eng muhim qadam **tekshiruv**: gcc + differensial test (2000 kirish). LLM javobiga ko'r-ko'rona ishonmaymiz.
 6. **Agent** = sikl: so'rov → tekshiruv → xatoni qaytarish (≤ 3) → zaxira.
 7. «**Tasdiqlandi**» ≠ «isbotlandi»: test kuchli dalil, isbot emas (SMT bu kelajak ish).
-8. Natijalar: **8/8**, murakkablik **58 → 21**, mismatch **0**, **123** test.
+8. Natijalar: **8/8**, murakkablik **58 → 21**, mismatch **0**, **156** test.
 9. Eng katta xato: haqiqiy shartni «soxta» deb o'chirgan; mustaqil tekshiruvchilar topdi, tuzatdik, test yozdik.
 10. Yopiq sayt: **kirish kodi** + serverdagi **kalit** + **kunlik byudjet** + **alohida huquqsiz foydalanuvchi**.
-11. Kalit faqat Render'da (`ANTHROPIC_API_KEY`), hech qachon kodda, chatda yoki GitHub'da.
+11. Kalit faqat Render'da (`DEEPSEEK_API_KEY`), hech qachon kodda, chatda yoki GitHub'da.
 12. Cheklovlar ochiq: real IDA/Ghidra va real obfuskatorlar bilan sinalmagan; virtualizatsiya yo'q.
 
 ---

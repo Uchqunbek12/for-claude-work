@@ -1,6 +1,6 @@
 """Agent: barcha qismlarni bitta jarayonga birlashtiradi.
 
-    kirish matni -> parser -> statik tahlil -> (Claude yoki offline) -> tekshiruv
+    kirish matni -> parser -> statik tahlil -> (LLM: DeepSeek/Claude yoki offline) -> tekshiruv
                                                     ^                      |
                                                     +---- xato bo'lsa -----+   (maks. N urinish)
 
@@ -18,7 +18,7 @@ from typing import Callable
 
 from . import detectors, metrics, offline, parser, prompts, verifier
 from .detectors import AnalysisResult
-from .llm import ClaudeSession, DiskCache, LLMError, UsageStats, resolve_model
+from .llm import DiskCache, LLMError, LLMSession, UsageStats, resolve_model
 from .models import FunctionInfo, ParsedInput
 from .schema import DeobfResult
 
@@ -112,7 +112,7 @@ def deobfuscate_function(parsed: ParsedInput, func: FunctionInfo, cfg: AgentConf
     session = None
     if not cfg.offline:
         model = resolve_model(cfg.model)
-        session = ClaudeSession(model=model, effort=cfg.effort, max_tokens=cfg.max_tokens, api_key=cfg.api_key,
+        session = LLMSession(model=model, effort=cfg.effort, max_tokens=cfg.max_tokens, api_key=cfg.api_key,
                                 cache=DiskCache(cfg.cache_dir) if cfg.cache_dir else None, client=cfg.client)
         usage = session.usage
         try:
@@ -122,7 +122,7 @@ def deobfuscate_function(parsed: ParsedInput, func: FunctionInfo, cfg: AgentConf
                 if deadline is not None and time.monotonic() > deadline:
                     error = error or "Vaqt chegarasiga yetildi — keyingi urinishlar bajarilmadi."
                     break
-                progress(f"[{func.name}] Claude ({model}) so'rovi, {rnd}-urinish...")
+                progress(f"[{func.name}] Model ({model}) so'rovi, {rnd}-urinish...")
                 result = session.ask(message)
                 progress(f"[{func.name}] Tekshiruv: kompilyatsiya va differensial test...")
                 rep = verifier.verify(parsed, func, result.c_code, cfg.n_tests)
@@ -138,15 +138,15 @@ def deobfuscate_function(parsed: ParsedInput, func: FunctionInfo, cfg: AgentConf
             progress(f"[{func.name}] LLM xatosi: {error}")
     if session is not None and best is not None and best[1].status in ("mismatch", "compile_error"):
         session.forget()               # xato javob keshda qolib, qayta urinishda $0 ga "qaytib kelmasin"
-    # Claude natijasi yo'q yoki "verified" emas -> offline natija bilan ham solishtiramiz va yaxshisini olamiz
+    # Model natijasi yo'q yoki "verified" emas -> offline natija bilan ham solishtiramiz va yaxshisini olamiz
     if best is None or best[1].status != "verified":
         if best is not None:
-            progress(f"[{func.name}] Claude natijasi tasdiqlanmadi — offline natija bilan solishtirilmoqda...")
+            progress(f"[{func.name}] Model natijasi tasdiqlanmadi — offline natija bilan solishtirilmoqda...")
         result, rep, extra = _run_offline(parsed, func, analysis, cfg, progress, len(attempts) + 1)
         attempts += extra
         if best is None or _better(rep, best[1]):
             if best is not None:
-                error = error or (f"Claude natijasi tekshiruvdan o'tmadi ({best[1].status}); "
+                error = error or (f"Model natijasi tekshiruvdan o'tmadi ({best[1].status}); "
                                   "o'rniga offline natija ishlatildi.")
             best, engine = (result, rep), "offline"
 

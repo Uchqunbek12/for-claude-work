@@ -36,12 +36,15 @@ from ..agent import AgentConfig, deobfuscate_text
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINES = [
-    ("sonnet", "Claude Sonnet 5.5 (tavsiya) — taxminan $0.03 / funksiya"),
+    ("deepseek", "DeepSeek Flash (tavsiya) — arzon va tez, o'rtacha $0.003 / funksiya"),
+    ("deepseek-pro", "DeepSeek V4 Pro — kuchliroq, taxminan $0.014 / funksiya"),
+    ("sonnet", "Claude Sonnet 5.5 — taxminan $0.03 / funksiya"),
     ("haiku", "Claude Haiku 5.5 — arzonroq, taxminan $0.002–0.005"),
     ("opus", "Claude Opus 5.5 — eng kuchli, taxminan $0.06–0.15"),
-    ("offline", "Offline — bepul, Claude'siz"),
+    ("offline", "Offline — bepul, LLM'siz"),
     ("custom", "Boshqa model (nomini o'zingiz yozasiz)"),
 ]
+PROVIDER_NAMES = {"anthropic": "Claude", "deepseek": "DeepSeek"}
 # Hisobot formatlari: nomi -> (chiqaruvchi funksiya, MIME turi)
 FORMATS = {
     "md": (report.to_markdown, "text/markdown"),
@@ -123,8 +126,8 @@ def _has_include(code: str) -> bool:
 
 def _similar_key_vars() -> list[str]:
     """Kalit o'zgaruvchisi nomi xato yozilgan bo'lsa topish uchun: faqat NOMLAR (qiymatlar hech qachon) qaytariladi."""
-    return sorted(n for n in os.environ if n != "ANTHROPIC_API_KEY" and "KEY" in n.upper()
-                  and any(w in n.upper() for w in ("ANT", "CLAUDE", "API")))[:6]
+    return sorted(n for n in os.environ if n not in llm.KEY_ENV.values() and "KEY" in n.upper()
+                  and any(w in n.upper() for w in ("ANT", "CLAUDE", "API", "DEEP", "SEEK")))[:6]
 
 
 def create_app(test_config: dict | None = None) -> Flask:
@@ -146,9 +149,25 @@ def create_app(test_config: dict | None = None) -> Flask:
         sandbox.configure(gated, log=app.logger.warning)   # kod ishga tushirish: faqat kod + (kalit bo'lsa) ajratish sinovi
         if sandbox.native_allowed():
             limits["n_tests"] = 2000                       # to'liq tekshiruv yoqilgan: shaxsiy rejimdagidek
-    server_key = bool(llm.server_api_key()) and (not public or sandbox.USE_SERVER_KEY)
+    # Serverdagi kalitlar (DEEPSEEK_API_KEY, ANTHROPIC_API_KEY): public rejimda faqat kirish kodi bilan ishlatiladi.
+    server_keys = {p: bool(llm.server_api_key(p)) for p in llm.PROVIDERS}
+
+    def usable(provider: str) -> bool:
+        return server_keys[provider] and (not public or bool(sandbox.USE_SERVER_KEY))
+
+    server_key = any(usable(p) for p in llm.PROVIDERS)
     # Kalit bor, kirish kodi yo'q: sayt "yopiq" bo'lishi kerak edi, lekin hammaga ochiq turibdi. Jimgina ochiq qoldirmaymiz.
-    needs_code = public and not gated and bool(llm.server_api_key())
+    needs_code = public and not gated and any(server_keys.values())
+    default_engine = "offline" if (public and not server_key) else llm.default_alias()
+
+    def provider_for(engine: str) -> str:
+        return llm.provider_of(llm.resolve_model(engine))
+
+    def visible_engines():
+        """Yopiq saytda faqat serverda kaliti bor provayderlarning modellari ko'rsatiladi (qolganlari baribir ishlamaydi)."""
+        if not (gated and server_key):
+            return ENGINES
+        return [(v, t) for v, t in ENGINES if v in ("offline", "custom") or usable(provider_for(v))]
     budget = Budget(app.config["DAILY_BUDGET_USD"] if sandbox.USE_SERVER_KEY else None)
     app.secret_key = os.environ.get("DEOBF_SESSION_SECRET") or secrets.token_hex(32)
     # Render kabi proksi orqasida haqiqiy mijoz IP'si kerak: ishonchli proksilar soni DEOBF_TRUSTED_PROXIES (standart 0)
@@ -234,10 +253,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         return redirect(url_for("login"), 303)
 
     def page(status: int = 200, **kw):
-        defaults = dict(form={"code": "", "function": "", "engine": "offline" if (public and not server_key) else "sonnet",
+        defaults = dict(form={"code": "", "function": "", "engine": default_engine,
                               "effort": "medium", "lang": "uz", "custom_model": ""},
-                        engines=ENGINES, samples=samples, data=None, error=None, rid=None, public=public,
-                        native=sandbox.native_allowed(), has_key=bool(llm.server_api_key()),
+                        engines=visible_engines(), samples=samples, data=None, error=None, rid=None, public=public,
+                        native=sandbox.native_allowed(), has_key=any(server_keys.values()),
                         gated=gated, server_key=server_key, similar_vars=_similar_key_vars() if not server_key else [])
         defaults.update(kw)
         return render_template("index.html", **defaults), status
@@ -262,24 +281,27 @@ def create_app(test_config: dict | None = None) -> Flask:
         if public and _has_include(form["code"]):
             return page(form=shown, error="Bu saytda `#include` qatorlari qo'llab-quvvatlanmaydi — "
                         "faqat funksiyaning o'zini joylang (turlar avtomatik qo'shiladi).")
-        engine = form["engine"] or ("offline" if (public and not server_key) else "sonnet")
+        engine = form["engine"] or default_engine
         if engine == "custom":
             engine = form["custom_model"].strip()
             if not engine:
                 return page(form=shown, error="'Boshqa model' tanlangan, lekin model nomi yozilmagan "
-                                              "(masalan: claude-sonnet-5-5).")
+                                              "(masalan: deepseek-flash yoki claude-sonnet-5-5).")
         offline = engine == "offline"
         api_key = form["api_key"].strip() or None
-        if public and not offline and not api_key and not server_key:
+        provider = None if offline else provider_for(engine)
+        has_server_key = provider is not None and usable(provider)
+        if public and not offline and not api_key and not has_server_key:
+            name = PROVIDER_NAMES[provider]
             if gated:
-                return page(form=shown, error="Serverda Claude kaliti ulanmagan: Render → Environment da ANTHROPIC_API_KEY "
-                            "nomli o'zgaruvchi yo'q yoki bo'sh (nomi aynan shunday bo'lishi kerak). Offline rejim ishlayveradi.")
-            return page(form=shown, error="Claude modeli uchun o'z API kalitingizni kiriting "
-                        "(sk-ant-...). Kalit saqlanmaydi. Yoki bepul Offline rejimni tanlang.")
-        uses_server_key = not offline and not api_key and server_key
+                return page(form=shown, error=f"Serverda {name} kaliti ulanmagan: Render → Environment da {llm.KEY_ENV[provider]} "
+                            "nomli o'zgaruvchi yo'q yoki bo'sh (nomi aynan shunday bo'lishi kerak). Boshqa model yoki Offline rejim ishlayveradi.")
+            return page(form=shown, error=f"{name} modeli uchun o'z API kalitingizni kiriting "
+                        f"({llm.KEY_ENV[provider]} qiymati, sk-...). Kalit saqlanmaydi. Yoki bepul Offline rejimni tanlang.")
+        uses_server_key = not offline and not api_key and has_server_key
         if uses_server_key and not budget.allow():
-            return page(form=shown, error="Bugungi Claude byudjeti tugadi (xavfsizlik chegarasi). Offline rejim ishlayveradi; "
-                        "ertaga yoki chegarani oshirgach Claude yana ishlaydi.")
+            return page(form=shown, error="Bugungi LLM byudjeti tugadi (xavfsizlik chegarasi). Offline rejim ishlayveradi; "
+                        "ertaga yoki chegarani oshirgach model yana ishlaydi.")
         if analyze_limiter is not None and not analyze_limiter.allow(request.remote_addr or "?", time.time()):
             resp, _ = page(form=shown, error="So'rovlar juda tez-tez yuborilyapti. Bir necha daqiqadan so'ng urinib ko'ring.")
             return Response(resp, status=429, headers={"Retry-After": "120"})
@@ -321,26 +343,31 @@ def create_app(test_config: dict | None = None) -> Flask:
         ok, message = llm.check_api_key(model, client=app.config["CLIENT"], api_key=api_key)
         return jsonify(ok=ok, message=message)
 
-    status_cache: dict = {"at": 0.0, "value": None}
+    status_cache: dict = {}              # provayder -> (vaqt, (ok, xabar))
     status_lock = threading.Lock()
 
     @app.get("/api/server-status")
     def server_status():
-        """Serverdagi kalit haqiqatan ishlayaptimi (Models API — bepul). Natija eslab qolinadi: sahifa har ochilganda
-        Anthropic'ga so'rov ketmaydi (muvaffaqiyat 10 daqiqa, xato 30 soniya)."""
-        if not server_key:
-            return jsonify(ok=False, message="Serverda ANTHROPIC_API_KEY topilmadi.")
+        """Serverdagi kalitlar haqiqatan ishlayaptimi (Models API — bepul). Natija eslab qolinadi: sahifa har ochilganda
+        provayderga so'rov ketmaydi (muvaffaqiyat 10 daqiqa, xato 30 soniya)."""
+        providers = [p for p in llm.PROVIDERS if usable(p)]
+        if not providers:
+            return jsonify(ok=False, message="Serverda API kalit topilmadi (DEEPSEEK_API_KEY yoki ANTHROPIC_API_KEY).")
+        parts, oks = [], []
         with status_lock:
             now = time.time()
-            cached = status_cache["value"]
-            if cached is None or now - status_cache["at"] > (600 if cached[0] else 30):
-                try:
-                    cached = llm.check_api_key("sonnet", client=app.config["CLIENT"])
-                except Exception:                                  # tarmoq / kutilmagan xato: sahifa buzilmasin
-                    app.logger.exception("server kalitini tekshirib bo'lmadi")
-                    cached = (False, "Kalitni tekshirib bo'lmadi (tarmoq xatosi). Tahlil qilib ko'ring.")
-                status_cache.update(at=now, value=cached)
-        return jsonify(ok=cached[0], message=cached[1])
+            for p in providers:
+                entry = status_cache.get(p)
+                if entry is None or now - entry[0] > (600 if entry[1][0] else 30):
+                    try:
+                        value = llm.check_api_key("deepseek" if p == "deepseek" else "sonnet", client=app.config["CLIENT"])
+                    except Exception:                              # tarmoq / kutilmagan xato: sahifa buzilmasin
+                        app.logger.exception("server kalitini tekshirib bo'lmadi")
+                        value = (False, "Kalitni tekshirib bo'lmadi (tarmoq xatosi). Tahlil qilib ko'ring.")
+                    entry = status_cache[p] = (now, value)
+                oks.append(entry[1][0])
+                parts.append((f"{PROVIDER_NAMES[p]}: " if len(providers) > 1 else "") + entry[1][1])
+        return jsonify(ok=all(oks), message=" · ".join(parts))
 
     @app.get("/download/<rid>.<fmt>")
     def download(rid: str, fmt: str):

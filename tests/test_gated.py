@@ -6,7 +6,7 @@ import pytest
 
 from deobf_agent import compiler, harness, sandbox
 from deobf_agent.web.app import create_app
-from tests.fakes import FakeClient, FakeResponse, make_result
+from tests.fakes import FakeClient, FakeDeepSeek, FakeResponse, deepseek_reply, make_result
 
 CODE = "7391"
 GOOD = make_result("unsigned int mix(unsigned int a, unsigned int b)\n{ return ((a + b) ^ (a - b)) | (a & 0xFFu); }", "mix")
@@ -200,7 +200,7 @@ def test_without_server_key_the_page_names_the_cause_and_misspelled_variables(ga
     c = gated().test_client()
     login(c)
     html = c.get("/").get_data(as_text=True)
-    assert "Serverda Claude kaliti ulanmagan" in html and "ANTHROPIC_KEY" in html     # xato nom ko'rsatiladi
+    assert "Serverda API kaliti ulanmagan" in html and "ANTHROPIC_KEY" in html     # xato nom ko'rsatiladi
     assert "SECRETVALUE" not in html                                                   # qiymat hech qachon ko'rsatilmaydi
     err = c.post("/analyze", data={"code": S1, "engine": "sonnet"}).get_data(as_text=True)
     assert "ANTHROPIC_API_KEY" in err and "API kalitingizni kiriting" not in err
@@ -244,3 +244,63 @@ def test_key_without_access_code_stops_the_site_and_explains_how_to_close_it(mon
     assert c.get("/healthz").get_data(as_text=True) == "ok"                           # Render sog'liq tekshiruvi buzilmaydi
     monkeypatch.delenv("ANTHROPIC_API_KEY")
     assert create_app({"ACCESS_CODE": ""}).test_client().get("/").status_code == 200   # kalitsiz ochiq sayt oldingidek ishlaydi
+
+
+DKEY = "sk-" + "a1b2c3d4" * 4
+
+
+def test_site_with_only_a_deepseek_key_offers_deepseek_uses_the_server_key_and_names_the_missing_claude_key(gated, monkeypatch):
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", True)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", DKEY)
+    fake = FakeDeepSeek([deepseek_reply(GOOD)])
+    c = gated(CLIENT=fake).test_client()
+    login(c)
+    html = c.get("/").get_data(as_text=True)
+    assert 'id="api_key"' not in html and DKEY not in html                      # kalit so'ralmaydi va sahifada yo'q
+    assert 'value="deepseek" selected' in html and 'value="deepseek-pro"' in html
+    assert 'value="sonnet"' not in html and 'value="offline"' in html           # kaliti yo'q provayder ko'rsatilmaydi
+    ok = c.post("/analyze", data={"code": S1, "engine": "deepseek"}).get_data(as_text=True)
+    assert "deepseek-flash" in ok and "kiriting" not in ok and len(fake.payloads) == 1
+    err = c.post("/analyze", data={"code": S1, "engine": "sonnet"}).get_data(as_text=True)
+    assert "Serverda Claude kaliti ulanmagan" in err and "ANTHROPIC_API_KEY" in err      # sababi aniq
+
+
+def test_both_keys_show_both_providers_and_deepseek_is_the_default(gated, monkeypatch):
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", True)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", DKEY)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-SERVERKEYSERVERKEY1234567890")
+    c = gated().test_client()
+    login(c)
+    html = c.get("/").get_data(as_text=True)
+    assert 'value="deepseek" selected' in html and 'value="sonnet"' in html and 'value="opus"' in html
+
+
+def test_server_status_checks_each_provider_once_and_remembers(gated, monkeypatch):
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", True)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", DKEY)
+    fake = FakeDeepSeek()
+    c = gated(CLIENT=fake).test_client()
+    login(c)
+    first = c.get("/api/server-status").get_json()
+    c.get("/api/server-status"); c.get("/api/server-status")
+    assert first["ok"] is True and "deepseek-flash" in first["message"] and fake.models_calls == 1
+
+
+def test_deepseek_key_without_access_code_stops_the_site(monkeypatch):
+    monkeypatch.setattr(sandbox, "PUBLIC", True)
+    monkeypatch.setattr(sandbox, "NATIVE", False)
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", DKEY)
+    r = create_app({"ACCESS_CODE": ""}).test_client().get("/")
+    assert r.status_code == 503 and "DEOBF_ACCESS_CODE" in r.get_data(as_text=True) and DKEY not in r.get_data(as_text=True)
+
+
+def test_open_site_without_keys_asks_visitors_for_their_own_deepseek_or_claude_key(monkeypatch):
+    monkeypatch.setattr(sandbox, "PUBLIC", True)
+    monkeypatch.setattr(sandbox, "NATIVE", False)
+    monkeypatch.setattr(sandbox, "USE_SERVER_KEY", False)
+    c = create_app({"ACCESS_CODE": ""}).test_client()
+    html = c.get("/").get_data(as_text=True)
+    assert 'value="deepseek"' in html and 'value="sonnet"' in html and 'id="api_key"' in html      # hamma modellar, o'z kaliti bilan
+    err = c.post("/analyze", data={"code": S1, "engine": "deepseek"}).get_data(as_text=True)
+    assert "o'z API kalitingizni kiriting" in err and "DEEPSEEK_API_KEY" in err

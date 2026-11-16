@@ -1,8 +1,8 @@
 """Buyruq qatori interfeysi (CLI).
 
 Misollar:
-  deobf analyze samples/decompiled/s3_flatten.angr.c              # Claude Sonnet 5.5 (standart)
-  deobf analyze kod.c --model haiku                               # arzonroq model (yoki --model opus — kuchliroq)
+  deobf analyze samples/decompiled/s3_flatten.angr.c              # standart model: DeepSeek (DEEPSEEK_API_KEY bor bo'lsa), aks holda Claude Sonnet
+  deobf analyze kod.c --model deepseek-pro                        # DeepSeek V4 Pro (yoki --model sonnet / haiku / opus — Claude)
   deobf analyze kod.c --offline                                   # bepul, LLM'siz
   deobf analyze kod.c -f sub_401136 --format html -o hisobot.html # bitta funksiya, HTML hisobot
   deobf functions kod.c                                           # fayldagi funksiyalar ro'yxati
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import __version__, parser, report
 from .agent import AgentConfig, deobfuscate_text
-from .llm import DEFAULT_MODEL, EFFORTS, LANGUAGES, MODEL_ALIASES, load_dotenv, resolve_model
+from .llm import EFFORTS, KEY_ENV, LANGUAGES, MODEL_ALIASES, load_dotenv, provider_of, resolve_model
 
 _DEFAULTS = AgentConfig()     # standart qiymatlar manbai (takrorlamaslik uchun)
 
@@ -109,26 +109,31 @@ def cmd_check(args) -> int:
         line(True, ".env fayli", f"{env_path}{hint}")
     else:
         line(None, ".env fayli", f"topilmadi (qidirilgan joylar: {os.getcwd()} va {llm.PROJECT_ROOT})")
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key:
-        src = ".env faylidan" if "ANTHROPIC_API_KEY" in llm.DOTENV_INFO.get("keys", []) else "tizim muhit o'zgaruvchisidan"
-        line(True, "ANTHROPIC_API_KEY", f"{llm.mask_key(key)} ({src})")
-    else:
-        line(False, "ANTHROPIC_API_KEY", "topilmadi — faqat --offline rejim ishlaydi")
+    keys = {p: llm.server_api_key(p) for p in llm.PROVIDERS}
+    for provider, key in keys.items():
+        env_name = KEY_ENV[provider]
+        if key:
+            src = ".env faylidan" if env_name in llm.DOTENV_INFO.get("keys", []) else "tizim muhit o'zgaruvchisidan"
+            line(True, env_name, f"{llm.mask_key(key)} ({src})")
+        else:
+            line(None, env_name, "topilmadi")
+    if not any(keys.values()):
+        line(False, "API kalit", "DEEPSEEK_API_KEY ham, ANTHROPIC_API_KEY ham topilmadi — faqat --offline rejim ishlaydi")
         ok_all = False
 
-    if key and not args.no_network:
-        print("\nKalitni Claude serverida tekshirish (bepul so'rov, matn yaratilmaydi)...")
-        models = [args.model] if args.model else list(MODEL_ALIASES)
+    if any(keys.values()) and not args.no_network:
+        print("\nKalitlarni serverda tekshirish (bepul so'rov, matn yaratilmaydi)...")
+        target = resolve_model(args.model)                 # tanlangan yoki standart model: uning xatosi natijani buzadi
+        models = [args.model] if args.model else [m for m in MODEL_ALIASES if keys[provider_of(resolve_model(m))]]
         for m in models:
             ok, msg = llm.check_api_key(m)
             line(ok, f"Model '{m}'", msg)
-            ok_all &= ok or resolve_model(m) != resolve_model(args.model)
+            ok_all &= ok or resolve_model(m) != target
 
     cc = compiler.find_compiler()
     line(True if cc else None, "C kompilyatori (gcc/clang)",
          cc or "topilmadi — vosita ishlaydi, lekin natijalar tekshirilmaydi (⚪). docs/02_foydalanish.md, 1-bo'lim")
-    print("\nStandart model:", llm.resolve_model(None), "(o'zgartirish: --model haiku yoki .env da DEOBF_MODEL=haiku)")
+    print("\nStandart model:", llm.resolve_model(None), "(o'zgartirish: --model deepseek-pro yoki .env da DEOBF_MODEL=sonnet)")
     print("\nNATIJA:", "hammasi tayyor ✅" if ok_all else "yuqoridagi ❌ belgili qatorlarni tuzating")
     return 0 if ok_all else 1
 
@@ -182,7 +187,7 @@ def build_parser() -> argparse.ArgumentParser:
     a = sub.add_parser("analyze", help="psevdokodni tahlil qilish")
     a.add_argument("input", help="fayl yo'li yoki '-' (standart kirish)")
     a.add_argument("-f", "--function", help="faqat shu funksiyani tahlil qilish")
-    a.add_argument("-m", "--model", help=f"model: {models} yoki to'liq model nomi (standart: {DEFAULT_MODEL})")
+    a.add_argument("-m", "--model", help=f"model: {models} yoki to'liq model nomi (standart: DeepSeek kaliti bo'lsa deepseek, aks holda sonnet)")
     a.add_argument("--offline", action="store_true", help="LLM'siz, faqat statik tahlil (bepul)")
     a.add_argument("--effort", default=_DEFAULTS.effort, choices=EFFORTS, help="o'ylash chuqurligi")
     a.add_argument("--lang", default=_DEFAULTS.language, choices=LANGUAGES, help="tushuntirish tili")
@@ -211,7 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("check", help="diagnostika: o'rnatish, .env, API kalit, gcc")
     c.add_argument("-m", "--model", help="faqat shu modelni tekshirish (masalan, sonnet)")
-    c.add_argument("--no-network", action="store_true", help="Claude serveriga ulanmasdan tekshirish")
+    c.add_argument("--no-network", action="store_true", help="Serverga ulanmasdan tekshirish")
     c.set_defaults(func=cmd_check)
 
     e = sub.add_parser("eval", help="test namunalari bo'yicha baholash")

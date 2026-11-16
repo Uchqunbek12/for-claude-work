@@ -1,0 +1,226 @@
+[
+  {
+    "id": "s1_mba",
+    "engine": "deepseek-flash",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 10,
+      "cyclomatic": 1
+    },
+    "after": {
+      "lines": 10,
+      "cyclomatic": 1
+    },
+    "clean": {
+      "lines": 4,
+      "cyclomatic": 1
+    },
+    "attempts": 1,
+    "cost": 0.0017928000000000002,
+    "tokens_in": 168,
+    "tokens_out": 1436,
+    "time": 8.87,
+    "error": "",
+    "suggested_name": "mix"
+  },
+  {
+    "id": "s2_opaque",
+    "engine": "deepseek-flash",
+    "verification": "verified",
+    "truth": "mismatch",
+    "truth_details": "5/28 testda farq:",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 17,
+      "cyclomatic": 7
+    },
+    "after": {
+      "lines": 7,
+      "cyclomatic": 5
+    },
+    "clean": {
+      "lines": 6,
+      "cyclomatic": 3
+    },
+    "attempts": 2,
+    "cost": 0.009712272,
+    "tokens_in": 2568,
+    "tokens_out": 7417,
+    "time": 36.27,
+    "error": "",
+    "suggested_name": "clamp"
+  },
+  {
+    "id": "s3_flatten",
+    "engine": "deepseek-flash",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 28,
+      "cyclomatic": 7
+    },
+    "after": {
+      "lines": 9,
+      "cyclomatic": 2
+    },
+    "clean": {
+      "lines": 6,
+      "cyclomatic": 2
+    },
+    "attempts": 1,
+    "cost": 0.0023157359999999997,
+    "tokens_in": 186,
+    "tokens_out": 1866,
+    "time": 11.27,
+    "error": "",
+    "suggested_name": "gcd"
+  },
+  {
+    "id": "s4_strings",
+    "engine": "deepseek-flash",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 9,
+      "cyclomatic": 2
+    },
+    "after": {
+      "lines": 14,
+      "cyclomatic": 2
+    },
+    "clean": {
+      "lines": 4,
+      "cyclomatic": 1
+    },
+    "attempts": 1,
+    "cost": 0.0018227999999999999,
+    "tokens_in": 176,
+    "tokens_out": 1459,
+    "time": 9.27,
+    "error": "",
+    "suggested_name": "greet_char"
+  },
+  {
+    "id": "s5_combined",
+    "engine": "deepseek-flash",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "5000 ta tasodifiy test — barchasi mos keldi",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 42,
+      "cyclomatic": 9
+    },
+    "after": {
+      "lines": 12,
+      "cyclomatic": 2
+    },
+    "clean": {
+      "lines": 8,
+      "cyclomatic": 2
+    },
+    "attempts": 1,
+    "cost": 0.002914308,
+    "tokens_in": 151,
+    "tokens_out": 2371,
+    "time": 13.72,
+    "error": "",
+    "suggested_name": "fnv1a_checksum"
+  },
+  {
+    "id": "s6_buffer",
+    "engine": "deepseek-flash",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "4665 ta tasodifiy test — barchasi mos keldi (335 ta kirishda asl funksiyaning o'zi xato bilan to'xtadi yoki osilib qoldi (o'tkazildi))",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 31,
+      "cyclomatic": 8
+    },
+    "after": {
+      "lines": 7,
+      "cyclomatic": 2
+    },
+    "clean": {
+      "lines": 5,
+      "cyclomatic": 2
+    },
+    "attempts": 1,
+    "cost": 0.0030093719999999997,
+    "tokens_in": 229,
+    "tokens_out": 2432,
+    "time": 14.98,
+    "error": "",
+    "suggested_name": "xor_stream"
+  },
+  {
+    "id": "s7_calls",
+    "engine": "deepseek-flash",
+    "verification": "verified",
+    "truth": "mismatch",
+    "truth_details": "5/15 testda farq (5 ta kirishda asl funksiyaning o'zi xato bilan to'xtadi yoki osilib qoldi (o'tkazildi)):",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 29,
+      "cyclomatic": 8
+    },
+    "after": {
+      "lines": 6,
+      "cyclomatic": 2
+    },
+    "clean": {
+      "lines": 9,
+      "cyclomatic": 2
+    },
+    "attempts": 1,
+    "cost": 0.002614704,
+    "tokens_in": 188,
+    "tokens_out": 2114,
+    "time": 12.62,
+    "error": "",
+    "suggested_name": "rot_hash"
+  },
+  {
+    "id": "s8_sort",
+    "engine": "deepseek-flash",
+    "verification": "verified",
+    "truth": "equivalent",
+    "truth_details": "4640 ta tasodifiy test — barchasi mos keldi (360 ta kirishda asl funksiyaning o'zi xato bilan to'xtadi yoki osilib qoldi (o'tkazildi))",
+    "recall": 1.0,
+    "missed": [],
+    "before": {
+      "lines": 50,
+      "cyclomatic": 16
+    },
+    "after": {
+      "lines": 16,
+      "cyclomatic": 5
+    },
+    "clean": {
+      "lines": 10,
+      "cyclomatic": 5
+    },
+    "attempts": 1,
+    "cost": 0.003827076,
+    "tokens_in": 211,
+    "tokens_out": 3116,
+    "time": 18.89,
+    "error": "",
+    "suggested_name": "bubble_sort"
+  }
+]

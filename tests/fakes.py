@@ -79,3 +79,34 @@ def make_result(c_code: str, name: str = "f", **kw) -> DeobfResult:
                 techniques=["mba"], c_code=c_code, blocks=[], renames=[], confidence="high", notes="")
     base.update(kw)
     return DeobfResult(**base)
+
+
+class FakeDeepSeek:
+    """Soxta DeepSeek mijozi (`chat(payload)` va `models()`): tarmoqqa chiqmaydi, oldindan berilgan javoblarni qaytaradi."""
+
+    def __init__(self, replies=(), error=None, models=("deepseek-flash", "deepseek-v4-pro")):
+        self.replies = list(replies)
+        self.error = error                  # DeepSeekError: har bir chaqiruvda ko'tariladi
+        self.payloads = []                  # yuborilgan so'rovlar (messages nusxasi bilan)
+        self.model_names = list(models)
+        self.models_calls = 0
+
+    def chat(self, payload):
+        self.payloads.append({**payload, "messages": [dict(m) for m in payload["messages"]]})
+        if self.error is not None:
+            raise self.error
+        return self.replies.pop(0)
+
+    def models(self):
+        self.models_calls += 1
+        if self.error is not None:
+            raise self.error
+        return list(self.model_names)
+
+
+def deepseek_reply(content, finish="stop", hit=0, miss=1000, out=500):
+    """DeepSeek `/chat/completions` javobi shaklidagi lug'at. `content` — DeobfResult yoki xom matn."""
+    text = content.model_dump_json() if isinstance(content, DeobfResult) else content
+    return {"choices": [{"index": 0, "finish_reason": finish, "message": {"role": "assistant", "content": text}}],
+            "usage": {"prompt_tokens": hit + miss, "completion_tokens": out, "prompt_cache_hit_tokens": hit,
+                      "prompt_cache_miss_tokens": miss}}

@@ -33,7 +33,7 @@
     }
   });
   if (document.body.dataset.autoCheck === "1") {      // serverdagi kalit ishlayaptimi — sahifa ochilishi bilan ko'rsatiladi
-    $("status").textContent = "Claude ulanishi tekshirilmoqda…";
+    $("status").textContent = "Model ulanishi tekshirilmoqda…";
     fetch(document.body.dataset.statusUrl).then(function (r) { return r.json(); }).then(function (data) {
       $("status").className = data.ok ? "ok" : "bad";
       $("status").textContent = data.ok ? "Server kaliti ulangan. " + data.message : data.message;
@@ -43,7 +43,7 @@
     $("submit").disabled = true;
     $("submit").textContent = "Ishlayapti…";
     $("status").className = "";
-    $("status").textContent = $("engine").value === "offline" ? "Odatda bir necha soniya." : "Claude bilan 1–2 daqiqagacha cho'zilishi mumkin.";
+    $("status").textContent = $("engine").value === "offline" ? "Odatda bir necha soniya." : "Model bilan 1–2 daqiqagacha cho'zilishi mumkin.";
   });
   var err = $("error");
   if (err) err.focus();          // xato ko'rinmay qolmasin (telefonda forma ostida qolishi mumkin)

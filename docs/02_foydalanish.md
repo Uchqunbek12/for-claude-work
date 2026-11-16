@@ -85,12 +85,22 @@ Tekshirish — barcha testlar o'tishi kerak:
 python -m pytest -q
 ```
 
-## 3. Claude API kalitini olish (bir martalik)
+## 3. API kalitini olish (bir martalik)
+
+Ikki variant, **bittasi yetadi**. Tavsiya: **DeepSeek** (≈ 10 baravar arzon: 8 namuna jami $0.028). Claude ham ishlaydi.
+
+### 3.A. DeepSeek (tavsiya)
+
+1. <https://platform.deepseek.com> saytida ro'yxatdan o'ting, **Top up** bilan hisobni to'ldiring (kichik summa yetadi: funksiyasiga ≈ $0.0035).
+2. **API keys → Create** — kalitni nusxalang (`sk-...`). Kalit faqat bir marta ko'rsatiladi; **hech kimga yubormang va chatga yozmang**.
+3. **`2_kalit_kiritish.bat`** ni ishga tushiring, **1** ni tanlang va kalitni joylang (yoki qo'lda: `.env` faylga `DEEPSEEK_API_KEY=sk-...`).
+
+### 3.B. Claude
 
 1. <https://console.anthropic.com> saytida ro'yxatdan o'ting.
 2. **Billing** bo'limida balansni to'ldiring (minimal summa yetarli: Sonnet bilan 1 ta funksiya taxminan **$0.03** (o'lchangan: $0.024–0.039), ya'ni $5 ga ~150 ta funksiya; Haiku bilan ancha arzon).
 3. **API Keys → Create Key** — kalitni nusxalang (`sk-ant-...`). Kalit faqat bir marta ko'rsatiladi.
-4. **`2_kalit_kiritish.bat`** ni ishga tushiring va kalitni joylang. Fayl `.env` ni o'zi yaratadi
+4. **`2_kalit_kiritish.bat`** ni ishga tushiring, **2** ni tanlang va kalitni joylang. Fayl `.env` ni o'zi yaratadi
    va kalitni tekshiradi.
 
    Qo'lda qilmoqchi bo'lsangiz, loyiha papkasida `.env` nomli fayl yarating (Notepad → *Save as* →
@@ -177,27 +187,31 @@ Foydali parametrlar:
 Standart modelni doimiy o'zgartirish: `.env` fayliga `DEOBF_MODEL=sonnet` qo'shing.
 
 ### 5.3. Model tanlash va "model qo'shish"
-Modellarni **qo'shish shart emas** — uchta Claude modeli vositaga allaqachon kiritilgan. Siz faqat
-qaysi birini ishlatishni **tanlaysiz**:
+Modellarni **qo'shish shart emas** — DeepSeek va Claude modellari vositaga allaqachon kiritilgan. Siz faqat
+qaysi birini ishlatishni **tanlaysiz** (qaysi kalit bo'lsa, shu provayderning modeli ishlaydi):
 
 | Model | Qisqa nomi | Narx (1 funksiya) | Qachon ishlatish |
 |---|---|---|---|
-| Claude Sonnet 5.5 | `sonnet` | ≈ $0.03 (o'lchangan: $0.024–0.039) | **standart** — kuchli va o'rtacha narxda |
+| DeepSeek Flash | `deepseek` | ≈ $0.0035 (o'lchangan: 8 namunada $0.0018–0.0097) | **standart** (`DEEPSEEK_API_KEY` bo'lsa) — arzon va tez |
+| DeepSeek V4 Pro | `deepseek-pro` | ≈ $0.014 (1 funksiyada o'lchangan) | kuchliroq; `--effort high` bilan 2 daqiqagacha cho'zilishi mumkin |
+| Claude Sonnet 5.5 | `sonnet` | ≈ $0.03 (o'lchangan: $0.024–0.039) | standart, agar faqat `ANTHROPIC_API_KEY` bo'lsa |
 | Claude Haiku 5.5 | `haiku` | taxminan $0.002–0.005 | arzonroq: oddiy funksiyalar, ko'p sinov uchun |
 | Claude Opus 5.5 | `opus` | taxminan $0.06–0.15 | eng murakkab funksiyalar uchun |
 | Offline | `--offline` | $0 | API kalitsiz: statik tahlil va qoidalarga asoslangan tushuntirish |
 
-> **Sonnet** narxi haqiqiy API bilan 5 ta funksiyada o'lchangan (`medium` effort; `docs/baholash_claude_sonnet.md`). Haiku va Opus
-> narxlari taxminiy. Model "o'ylashi" ham chiqish tokeni sifatida hisoblanadi, shuning uchun murakkabroq kodda yoki
+> **DeepSeek Flash** narxi haqiqiy API bilan 8 namunada o'lchangan (`docs/baholash_deepseek.md`), **Sonnet** — 5 funksiyada (`docs/baholash_claude_sonnet.md`).
+> V4 Pro, Haiku va Opus narxlari taxminiy (V4 Pro: bitta funksiyada o'lchangan). Model "o'ylashi" ham chiqish tokeni sifatida hisoblanadi, shuning uchun murakkabroq kodda yoki
 > `--effort high` da narx oshadi. Aniq narx har bir hisobotda ko'rsatiladi.
 
 Tanlash usullari:
 - **Web UI:** "Model (dvigatel)" ro'yxatidan tanlang. Ro'yxatda bo'lmagan boshqa Claude modelini
   ishlatish uchun **"Boshqa model"** ni tanlang va to'liq nomini yozing (masalan, `claude-sonnet-5-5`).
   Mana shu "model qo'shish" bo'ladi. Ishlashini **"Kalitni tekshirish"** tugmasi bilan tekshiring.
-- **CLI:** `deobf analyze kod.c --model sonnet` (yoki to'liq nom: `--model claude-sonnet-5-5`).
+- **CLI:** `deobf analyze kod.c --model deepseek` (yoki `--model sonnet`; to'liq nom ham bo'ladi: `--model deepseek-flash`, `--model claude-sonnet-5-5`).
 - **Doimiy standart:** `.env` fayliga ikkinchi qator qo'shing: `DEOBF_MODEL=sonnet`.
-  Shundan keyin `--model` yozilmasa, Sonnet ishlatiladi.
+  Shundan keyin `--model` yozilmasa, shu model ishlatiladi. (Yozilmasa: DeepSeek kaliti bo'lsa DeepSeek Flash, aks holda Claude Sonnet.)
+- **Chuqurlik (`--effort`):** DeepSeek'da *past* — o'ylash o'chiq; *o'rta* (standart) — birinchi urinishda o'chiq, tekshiruv xato topib tuzatish so'ralganda **o'zi yoqiladi**;
+  *yuqori* — doim yoqilgan (aniqroq, lekin sekinroq va qimmatroq). Kutish chegarasini oshirish: `.env` ga `DEOBF_LLM_TIMEOUT=200`.
 
 > Model nomlari kodda bitta joyda — `deobf_agent/llm.py` faylidagi `MODEL_ALIASES` lug'atida.
 > Kelajakda yangi model chiqsa, uni shu yerga bitta qator qilib qo'shish kifoya

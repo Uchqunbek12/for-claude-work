@@ -16,3 +16,10 @@ def _restore_environ():
     yield
     os.environ.clear()
     os.environ.update(saved)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_keys(monkeypatch):
+    """Dasturchining haqiqiy kalitlari (muhitda yoki .env da) testlar natijasiga ta'sir qilmasin."""
+    for name in ("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "DEOBF_MODEL"):
+        monkeypatch.delenv(name, raising=False)

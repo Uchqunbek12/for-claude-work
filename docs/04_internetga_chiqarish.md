@@ -33,7 +33,7 @@ topsa, u bularning hammasiga qo'l uzatadi. Shuning uchun qatlamlar:
 | Xavf | Himoya |
 |---|---|
 | Kodni taxmin qilish (4 xonali kod = 10 000 variant) | Noto'g'ri urinishlar **cheklangan**: bitta IP'dan 15 daqiqada 5 ta; barcha IP'lardan jami 1 soatda 40 ta — undan keyin hamma bloklanadi (to'g'ri kod ham, to'xtaguncha). Kod taqqoslash vaqt bo'yicha sezgir emas (`hmac.compare_digest`). |
-| Kod topilsa, Claude pulini sarflash | **Kunlik byudjet** (`DEOBF_DAILY_BUDGET_USD`, standart $2): shundan keyin Claude to'xtaydi, offline ishlayveradi. Anthropic konsolida oylik **spend limit** qo'ying (3-bo'lim). |
+| Kod topilsa, LLM pulini sarflash | **Kunlik byudjet** (`DEOBF_DAILY_BUDGET_USD`, standart $2): shundan keyin model to'xtaydi, offline ishlayveradi. Provayder hisobida ham chegara qo'ying (DeepSeek: oldindan to'ldirilgan balans; Claude: oylik **spend limit**, 3-bo'lim). |
 | Kod topilsa, serverdagi kalitni o'g'irlash | Tekshirilayotgan kod **alohida huquqsiz foydalanuvchi** (`DEOBF_SANDBOX_UID`) nomidan ishlaydi: u serverning muhit o'zgaruvchilarini (`/proc/<pid>/environ`, ya'ni kalit) va xotirasini o'qiy olmaydi (`Permission denied`; bu testda tekshirilgan). Server ishga tushganda shu ajratish **o'zi sinab ko'riladi**; sinov o'tmasa, kod ishga tushirilmaydi. |
 | Kalitni kodsiz ishlatish | `DEOBF_USE_SERVER_KEY` kirish kodisiz **ishga tushmaydi** (server boot xatosi beradi). `DEOBF_NATIVE` ham kirish kodisiz ishlamaydi. |
 | Kirish kodi/kalit GitHub'da ko'rinib qolishi | Ikkalasi `render.yaml` da **yo'q**: u yerda faqat `sync: false` belgisi bor, qiymatni Render sizdan so'raydi va faqat o'z sozlamalarida saqlaydi. |
@@ -54,12 +54,13 @@ topsa, u bularning hammasiga qo'l uzatadi. Shuning uchun qatlamlar:
 Repozitoriyadagi `Dockerfile` va `render.yaml` tayyor. GitHub'da asosiy (default) branch `claude/vibrant-heisenberg-teie45`
 (alohida `main` yo'q) — Render uni o'zi oladi.
 
-### 3.1. Oldindan: Anthropic'da kalit va limit
+### 3.1. Oldindan: DeepSeek'da kalit va balans
 
-1. [console.anthropic.com](https://console.anthropic.com) → **API keys** → yangi kalit yarating (`sk-ant-...`). Uni **hech kimga
-   yubormang** va chatga yozmang.
-2. **Billing** → balansni to'ldiring (kichik summa yetadi).
-3. **Limits** (yoki Billing sozlamalari) → **oylik xarajat chegarasi** qo'ying (masalan, $5–10). Bu eng ishonchli himoya:
+1. [platform.deepseek.com](https://platform.deepseek.com) → **API keys** → yangi kalit yarating (`sk-...`). Uni **hech kimga
+   yubormang** va chatga yozmang. *(Claude ishlatmoqchi bo'lsangiz: [console.anthropic.com](https://console.anthropic.com) → API keys → `sk-ant-...`.)*
+   DeepSeek hisobi oldindan to'ldiriladi: balans tugasa so'rovlar to'xtaydi, bu ham xarajatni chegaralaydi.
+2. **Top up** → balansni to'ldiring (kichik summa yetadi: funksiyasiga ≈ $0.0035).
+3. Claude ishlatsangiz: **Limits** → **oylik xarajat chegarasi** qo'ying (masalan, $5–10). Bu eng ishonchli himoya:
    kod qo'lga tushsa ham, siz belgilagan summadan ortiq sarflanmaydi.
 
 ### 3.2. Render'da
@@ -69,14 +70,14 @@ Repozitoriyadagi `Dockerfile` va `render.yaml` tayyor. GitHub'da asosiy (default
    *(Tugma nomlari vaqt o'tishi bilan o'zgarishi mumkin: maqsad — repozitoriyani ulab, `render.yaml` dan servis yaratish.)*
 3. Render `render.yaml` ni o'qiydi va **ikki qiymatni so'raydi**:
    * `DEOBF_ACCESS_CODE` — saytga kirish kodi (o'zingiz tanlagan 4 xonali son);
-   * `ANTHROPIC_API_KEY` — 3.1-qadamdagi kalit.
+   * `DEEPSEEK_API_KEY` — 3.1-qadamdagi kalit.
 4. **Apply / Create** bosing. Qurilish 3–6 daqiqa davom etadi (gcc o'rnatiladi).
 5. Tayyor bo'lgach, Render `https://deobf-agent-xxxx.onrender.com` havolasini beradi. Ochganda **kirish kodi** so'raladi.
 6. Namoyishdan oldin sahifani bir marta oching: bepul reja 15 daqiqa foydalanilmasa «uxlab qoladi» va birinchi
    ochilish 30–60 soniya sekinroq bo'ladi.
 
 **Servisni qo'lda yaratgan bo'lsangiz** (Blueprint o'rniga «New → Web Service»): Environment bo'limiga **ikkita** maydon yozish yetadi:
-`DEOBF_ACCESS_CODE` (kirish kodi) va `ANTHROPIC_API_KEY` (kalit). Qolganlari (`DEOBF_PUBLIC`, `DEOBF_TRUSTED_PROXIES`,
+`DEOBF_ACCESS_CODE` (kirish kodi) va `DEEPSEEK_API_KEY` (kalit; yoki Claude uchun `ANTHROPIC_API_KEY`). Qolganlari (`DEOBF_PUBLIC`, `DEOBF_TRUSTED_PROXIES`,
 `DEOBF_SANDBOX_UID`) Dockerfile'da berilgan, server kaliti va to'liq tekshiruv esa kirish kodi bor bo'lgani uchun o'zi yoqiladi.
 O'zgartirgandan keyin Render servisni qayta ishga tushiradi (yoki **Manual Deploy → Deploy latest commit**).
 
@@ -91,6 +92,15 @@ O'zgartirgandan keyin Render servisni qayta ishga tushiradi (yoki **Manual Deplo
 | `DEOBF_TRUSTED_PROXIES=1` | Render proksi orqasida; shunda urinish cheklovi har bir haqiqiy mijoz IP'si uchun. To'g'ridan-to'g'ri internetga ochilsa o'rnatilmaydi. |
 | `DEOBF_SESSION_SECRET` (Render o'zi yaratadi) | Sessiya cookie imzosi. |
 
+### 3.3.0. Mavjud servisda Claude'dan DeepSeek'ga o'tish
+
+1. Kodni yangilang: Render → servis → **Manual Deploy → Deploy latest commit** (DeepSeek qo'llab-quvvatlashi yangi kodda).
+2. Render → **Environment** → **Add Environment Variable**: nomi `DEEPSEEK_API_KEY` (aynan shunday), qiymati: DeepSeek kalitingiz → **Save Changes**.
+3. Eski `ANTHROPIC_API_KEY` yaroqsiz bo'lsa, uni **o'chirib tashlang** (aks holda sahifada Claude modellari ham ko'rinadi va ular ishlamaydi).
+   Claude ham kerak bo'lsa, qoldiring: ikkala provayder bir vaqtda ishlaydi, standart esa DeepSeek.
+4. Servis qayta ishga tushgach, kod bilan kiring. Tepada **«Server kaliti ulangan. Kalit ishlayapti — model mavjud: deepseek-flash»** yozuvi va
+   «Model» ro'yxatida DeepSeek Flash / V4 Pro turishi kerak. Kalit maydoni ko'rinmaydi.
+
 ### 3.3.1. Sayt nomi va havola
 
 * **Sahifadagi nom** (sarlavha va tepada): Render → Environment → `DEOBF_SITE_NAME` (masalan, `Kod Ochar`). Bo'sh bo'lsa `deobfuskatsiya`.
@@ -100,9 +110,9 @@ O'zgartirgandan keyin Render servisni qayta ishga tushiradi (yoki **Manual Deplo
 
 | Belgi | Sabab va yechim |
 |---|---|
-| Sayt kod so'ramaydi, «Sayt hali yopilmagan: kirish kodi qo'yilmagan» chiqadi (503) | `ANTHROPIC_API_KEY` bor, lekin `DEOBF_ACCESS_CODE` yo'q. Kodsiz sayt hammaga ochiq bo'lardi, shuning uchun u to'xtatiladi va kalit ishlatilmaydi. Render → Environment → `DEOBF_ACCESS_CODE` = o'zingiz tanlagan kod → Save. |
-| Kirgandan keyin qizil blok «Serverda Claude kaliti ulanmagan» va «Sizning kalitingiz» maydoni chiqadi | Render → Environment da `ANTHROPIC_API_KEY` yo'q, bo'sh yoki nomi boshqacha yozilgan (sahifa o'xshash nomlarni o'zi ko'rsatadi). To'g'ri nom: `ANTHROPIC_API_KEY`. Saqlagach Render servisni o'zi qayta ishga tushiradi. |
-| Kalit maydoni yo'q, lekin pastda qizil «Kalit noto'g'ri yoki bekor qilingan» | Kalit Render'ga ulangan, lekin Anthropic uni qabul qilmayapti: console.anthropic.com da kalit o'chirilgan/bekor qilingan yoki to'liq nusxalanmagan. Yangi kalit yarating va `ANTHROPIC_API_KEY` qiymatini almashtiring. |
+| Sayt kod so'ramaydi, «Sayt hali yopilmagan: kirish kodi qo'yilmagan» chiqadi (503) | `DEEPSEEK_API_KEY` (yoki `ANTHROPIC_API_KEY`) bor, lekin `DEOBF_ACCESS_CODE` yo'q. Kodsiz sayt hammaga ochiq bo'lardi, shuning uchun u to'xtatiladi va kalit ishlatilmaydi. Render → Environment → `DEOBF_ACCESS_CODE` = o'zingiz tanlagan kod → Save. |
+| Kirgandan keyin qizil blok «Serverda API kaliti ulanmagan» va «Sizning kalitingiz» maydoni chiqadi | Render → Environment da `DEEPSEEK_API_KEY` (Claude uchun `ANTHROPIC_API_KEY`) yo'q, bo'sh yoki nomi boshqacha yozilgan (sahifa o'xshash nomlarni o'zi ko'rsatadi). To'g'ri nom: `DEEPSEEK_API_KEY`. Saqlagach Render servisni o'zi qayta ishga tushiradi. |
+| Kalit maydoni yo'q, lekin pastda qizil «Kalit noto'g'ri yoki bekor qilingan» | Kalit Render'ga ulangan, lekin provayder uni qabul qilmayapti: platform.deepseek.com (Claude uchun console.anthropic.com) da kalit o'chirilgan/bekor qilingan yoki to'liq nusxalanmagan. Yangi kalit yarating va Render'dagi qiymatni almashtiring. «Hisobda mablag' tugagan (402)» chiqsa — DeepSeek hisobini to'ldiring. |
 | «Server kodni ishga tushirmaydi… Tekshirilmadi» | Render konteynerda kodni alohida foydalanuvchi nomidan ishga tushirishga ruxsat bermadi (log'da «OGOHLANTIRISH» bor). Claude va Offline ishlayveradi, faqat gcc + test o'chadi. |
 | Kod yozilganda ham kirmaydi / «Juda ko'p noto'g'ri urinish» | Noto'g'ri urinishlar cheklovi (IP: 15 daqiqada 5 ta). Biroz kuting. |
 | Servis ishga tushmaydi, log'da `DEOBF_USE_SERVER_KEY ... DEOBF_ACCESS_CODE` | `DEOBF_USE_SERVER_KEY=1` yozilgan, lekin `DEOBF_ACCESS_CODE` bo'sh. Kodni yozing (yoki `DEOBF_USE_SERVER_KEY` ni olib tashlang). |

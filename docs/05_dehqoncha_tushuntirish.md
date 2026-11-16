@@ -1,5 +1,7 @@
 # 05. "Dehqoncha" tushuntirish rejimi
 
+> **Eslatma:** bu hujjatda «Claude» deyilgan joylarda LLM nazarda tutiladi: tushuntirishni DeepSeek ham, Claude ham bir xil qoidalar (`prompts.SYSTEM_PROMPT`) bilan yozadi.
+
 Vositaning har bir tushuntirishi **ikki tilda** beriladi:
 
 * **Mutaxassis uchun** — "MBA ifoda", "opaque predicate", "control-flow flattening" kabi atamalar bilan.

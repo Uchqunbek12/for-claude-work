@@ -4,7 +4,8 @@
 # MUHIM: maxfiy qiymatlar (sync: false) bu faylda YO'Q. Blueprint yaratayotganda Render ularni sizdan so'raydi va
 # faqat o'z sozlamalarida saqlaydi (GitHub'ga tushmaydi):
 #   DEOBF_ACCESS_CODE  — saytga kirish kodi (masalan, 4 xonali son)
-#   ANTHROPIC_API_KEY  — sizning Claude API kalitingiz (sk-ant-...)
+#   DEEPSEEK_API_KEY   — sizning DeepSeek API kalitingiz (platform.deepseek.com). Claude kerak bo'lsa, qo'shimcha
+#                        ANTHROPIC_API_KEY (sk-ant-...) ham qo'shish mumkin; Environment bo'limida istalgan vaqt.
 services:
   - type: web
     name: deobfuskatsiya
@@ -18,9 +19,9 @@ services:
         value: "1"
       - key: DEOBF_ACCESS_CODE          # kirish kodi: kodsiz saytga kirib bo'lmaydi (urinishlar cheklangan)
         sync: false
-      - key: ANTHROPIC_API_KEY          # server kaliti: faqat kod bilan kirganlar uchun ishlaydi
+      - key: DEEPSEEK_API_KEY           # server kaliti: faqat kod bilan kirganlar uchun ishlaydi
         sync: false
-      - key: DEOBF_DAILY_BUDGET_USD     # kunlik Claude xarajati chegarasi (dollar)
+      - key: DEOBF_DAILY_BUDGET_USD     # kunlik LLM xarajati chegarasi (dollar)
         value: "2"
       # Kirish kodi bor bo'lgani uchun server kaliti va to'liq tekshiruv (alohida huquqsiz foydalanuvchi nomidan)
       # AVTOMATIK yoqiladi. O'chirish uchun DEOBF_USE_SERVER_KEY=0 yoki DEOBF_NATIVE=0 qo'shing.
